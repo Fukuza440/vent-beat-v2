@@ -1,0 +1,170 @@
+[
+  {
+    "file": "hat_hi-hat-231042.wav",
+    "label": "hat_hi-hat-231042"
+  },
+  {
+    "file": "hat_open-hat-snake-100639.wav",
+    "label": "hat_open-hat-snake-100639"
+  },
+  {
+    "file": "hat_open-hi-hat-431740.wav",
+    "label": "hat_open-hi-hat-431740"
+  },
+  {
+    "file": "hat_reverse-hi-hat-drum-439113.wav",
+    "label": "hat_reverse-hi-hat-drum-439113"
+  },
+  {
+    "file": "hat_slightly-open-high-hat-263835.wav",
+    "label": "hat_slightly-open-high-hat-263835"
+  },
+  {
+    "file": "hit_fragsound-gong-84816.wav",
+    "label": "hit_fragsound-gong-84816"
+  },
+  {
+    "file": "hit_hutch-hd-sfx-2014-0143-99637.wav",
+    "label": "hit_hutch-hd-sfx-2014-0143-99637"
+  },
+  {
+    "file": "hit_hutch-hd-sfx-2014-0144-45823.wav",
+    "label": "hit_hutch-hd-sfx-2014-0144-45823"
+  },
+  {
+    "file": "hit_metal-hit-10-193281 (1).wav",
+    "label": "hit_metal-hit-10-193281 (1)"
+  },
+  {
+    "file": "hit_metal-hit-10-193281.wav",
+    "label": "hit_metal-hit-10-193281"
+  },
+  {
+    "file": "hit_metal-hit-2-287908.wav",
+    "label": "hit_metal-hit-2-287908"
+  },
+  {
+    "file": "hit_metal-pipe-swing-1-47741.wav",
+    "label": "hit_metal-pipe-swing-1-47741"
+  },
+  {
+    "file": "hit_metal-punch-142334.wav",
+    "label": "hit_metal-punch-142334"
+  },
+  {
+    "file": "hit_metal.wav",
+    "label": "hit_metal"
+  },
+  {
+    "file": "hit_mid.wav",
+    "label": "hit_mid"
+  },
+  {
+    "file": "hit_shield-guard-6963.wav",
+    "label": "hit_shield-guard-6963"
+  },
+  {
+    "file": "hit_soft.wav",
+    "label": "hit_soft"
+  },
+  {
+    "file": "kick_deep-kick-397047.wav",
+    "label": "kick_deep-kick-397047"
+  },
+  {
+    "file": "kick_kick-drum-263837.wav",
+    "label": "kick_kick-drum-263837"
+  },
+  {
+    "file": "kick_kick-greg-232043.wav",
+    "label": "kick_kick-greg-232043"
+  },
+  {
+    "file": "kick_kick-hardstyle-149795.wav",
+    "label": "kick_kick-hardstyle-149795"
+  },
+  {
+    "file": "kick_wiese-kick-blau-310489.wav",
+    "label": "kick_wiese-kick-blau-310489"
+  },
+  {
+    "file": "perc_acoustic-side-stick-94277.wav",
+    "label": "perc_acoustic-side-stick-94277"
+  },
+  {
+    "file": "perc_anvil-hit-1-103967.wav",
+    "label": "perc_anvil-hit-1-103967"
+  },
+  {
+    "file": "perc_anvil-hit-2-14845.wav",
+    "label": "perc_anvil-hit-2-14845"
+  },
+  {
+    "file": "perc_bottle-hitting-a-table-103415.wav",
+    "label": "perc_bottle-hitting-a-table-103415"
+  },
+  {
+    "file": "perc_clavelow-91764.wav",
+    "label": "perc_clavelow-91764"
+  },
+  {
+    "file": "perc_dirty-tony-cowbell-mx-013-107592.wav",
+    "label": "perc_dirty-tony-cowbell-mx-013-107592"
+  },
+  {
+    "file": "perc_drumsticks-pro-mark-la-special-2bn-hickory-no4-103712.wav",
+    "label": "perc_drumsticks-pro-mark-la-special-2bn-hickory-no4-103712"
+  },
+  {
+    "file": "perc_toy-button-105724.wav",
+    "label": "perc_toy-button-105724"
+  },
+  {
+    "file": "perc_wood-block-105066.wav",
+    "label": "perc_wood-block-105066"
+  },
+  {
+    "file": "snare_snare-3-243039.wav",
+    "label": "snare_snare-3-243039"
+  },
+  {
+    "file": "snare_snare-drum-341273.wav",
+    "label": "snare_snare-drum-341273"
+  },
+  {
+    "file": "snare_tr707-snare-drum-241412.wav",
+    "label": "snare_tr707-snare-drum-241412"
+  },
+  {
+    "file": "snare_tr808-snare-drum-241403.wav",
+    "label": "snare_tr808-snare-drum-241403"
+  },
+  {
+    "file": "snare_tr909-snare-drum-241413.wav",
+    "label": "snare_tr909-snare-drum-241413"
+  },
+  {
+    "file": "sweep_aspero-crujido-2_1-harsh-creaking-2_1-338164.wav",
+    "label": "sweep_aspero-crujido-2_1-harsh-creaking-2_1-338164"
+  },
+  {
+    "file": "sweep_bd-rub-dj-fx-344125.wav",
+    "label": "sweep_bd-rub-dj-fx-344125"
+  },
+  {
+    "file": "sweep_funny-swish-101878.wav",
+    "label": "sweep_funny-swish-101878"
+  },
+  {
+    "file": "sweep_metal-whoosh-hit-4-201906.wav",
+    "label": "sweep_metal-whoosh-hit-4-201906"
+  },
+  {
+    "file": "sweep_sd-rub-dj-fx-344131.wav",
+    "label": "sweep_sd-rub-dj-fx-344131"
+  },
+  {
+    "file": "sweep_sonar-sweep-beep-80957.wav",
+    "label": "sweep_sonar-sweep-beep-80957"
+  }
+]
