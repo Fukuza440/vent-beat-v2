@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vent Fan Beat Simulator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-card">
+    <h1>Vent Fan Beat Simulator</h1>
+
+    <button id="toggleButton" class="primary">Start</button>
+
+    <div class="control-group">
+      <div class="control-group-title">Rhythmic Foundation</div>
+      <div class="control">
+        <span class="control-label">RPM</span>
+        <button
+          class="step-button"
+          data-slider="rpmSlider"
+          data-direction="-1"
+          aria-label="Decrease RPM"
+        >
+          -
+        </button>
+        <input
+          id="rpmSlider"
+          type="range"
+          min="10"
+          max="2000"
+          step="1"
+          value="200"
+        />
+        <button
+          class="step-button"
+          data-slider="rpmSlider"
+          data-direction="1"
+          aria-label="Increase RPM"
+        >
+          +
+        </button>
+        <span id="rpmValue" class="control-value">200</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-group-title">Fan Geometry</div>
+      <div class="control">
+        <span class="control-label">Blade Count</span>
+        <button
+          class="step-button"
+          data-slider="bladeSlider"
+          data-direction="-1"
+          aria-label="Decrease blade count"
+        >
+          -
+        </button>
+        <input
+          id="bladeSlider"
+          type="range"
+          min="1"
+          max="8"
+          step="1"
+          value="3"
+        />
+        <button
+          class="step-button"
+          data-slider="bladeSlider"
+          data-direction="1"
+          aria-label="Increase blade count"
+        >
+          +
+        </button>
+        <span id="bladeValue" class="control-value">3</span>
+      </div>
+      <div class="control">
+        <span class="control-label">Obstacle Count</span>
+        <button
+          class="step-button"
+          data-slider="obstacleSlider"
+          data-direction="-1"
+          aria-label="Decrease obstacle count"
+        >
+          -
+        </button>
+        <input
+          id="obstacleSlider"
+          type="range"
+          min="0"
+          max="8"
+          step="1"
+          value="3"
+        />
+        <button
+          class="step-button"
+          data-slider="obstacleSlider"
+          data-direction="1"
+          aria-label="Increase obstacle count"
+        >
+          +
+        </button>
+        <span id="obstacleValue" class="control-value">3</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-group-title">Rotation Dynamics</div>
+      <div class="control">
+        <span class="control-label">Axis Jitter</span>
+        <button
+          class="step-button"
+          data-slider="axisSlider"
+          data-direction="-1"
+          aria-label="Decrease axis jitter"
+        >
+          -
+        </button>
+        <input
+          id="axisSlider"
+          type="range"
+          min="0"
+          max="0.4"
+          step="0.01"
+          value="0.1"
+        />
+        <button
+          class="step-button"
+          data-slider="axisSlider"
+          data-direction="1"
+          aria-label="Increase axis jitter"
+        >
+          +
+        </button>
+        <span id="axisValue" class="control-value">0.10</span>
+      </div>
+      <div class="control">
+        <span class="control-label">Timing Jitter (%)</span>
+        <button
+          class="step-button"
+          data-slider="timingJitterSlider"
+          data-direction="-1"
+          aria-label="Decrease timing jitter"
+        >
+          -
+        </button>
+        <input
+          id="timingJitterSlider"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="30"
+        />
+        <button
+          class="step-button"
+          data-slider="timingJitterSlider"
+          data-direction="1"
+          aria-label="Increase timing jitter"
+        >
+          +
+        </button>
+        <span id="timingJitterValue" class="control-value">30</span>
+      </div>
+      <div class="control">
+        <span class="control-label">Wobble Freq (Hz)</span>
+        <button
+          class="step-button"
+          data-slider="wobbleFreqSlider"
+          data-direction="-1"
+          aria-label="Decrease wobble frequency"
+        >
+          -
+        </button>
+        <input
+          id="wobbleFreqSlider"
+          type="range"
+          min="0"
+          max="20"
+          step="0.1"
+          value="3"
+        />
+        <button
+          class="step-button"
+          data-slider="wobbleFreqSlider"
+          data-direction="1"
+          aria-label="Increase wobble frequency"
+        >
+          +
+        </button>
+        <span id="wobbleFreqValue" class="control-value">3.0</span>
+      </div>
+      <div class="control">
+        <label class="control-label" for="wobbleMode">Wobble Mode</label>
+        <select id="wobbleMode" class="wobble-mode-select">
+          <option value="locked">Locked</option>
+          <option value="chaotic">Chaotic</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-group-title">Sound &amp; Response</div>
+      <div class="control">
+        <span class="control-label">Hit Threshold</span>
+        <button
+          class="step-button"
+          data-slider="thresholdSlider"
+          data-direction="-1"
+          aria-label="Decrease hit threshold"
+        >
+          -
+        </button>
+        <input
+          id="thresholdSlider"
+          type="range"
+          min="0.02"
+          max="0.4"
+          step="0.01"
+          value="0.12"
+        />
+        <button
+          class="step-button"
+          data-slider="thresholdSlider"
+          data-direction="1"
+          aria-label="Increase hit threshold"
+        >
+          +
+        </button>
+        <span id="thresholdValue" class="control-value">0.12</span>
+      </div>
+      <div class="control">
+        <span class="control-label">Envelope Tail (ms)</span>
+        <button
+          class="step-button"
+          data-slider="tailSlider"
+          data-direction="-1"
+          aria-label="Decrease tail length"
+        >
+          -
+        </button>
+        <input
+          id="tailSlider"
+          type="range"
+          min="50"
+          max="800"
+          step="10"
+          value="250"
+        />
+        <button
+          class="step-button"
+          data-slider="tailSlider"
+          data-direction="1"
+          aria-label="Increase tail length"
+        >
+          +
+        </button>
+        <span id="tailValue" class="control-value">250</span>
+      </div>
+      <div class="control">
+        <label class="control-label" for="impactDynamics">Impact Dynamics (%)</label>
+        <button
+          class="step-button"
+          data-slider="impactDynamicsSlider"
+          data-direction="-1"
+          aria-label="Decrease impact dynamics"
+        >
+          -
+        </button>
+        <input
+          id="impactDynamicsSlider"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="40"
+        />
+        <button
+          class="step-button"
+          data-slider="impactDynamicsSlider"
+          data-direction="1"
+          aria-label="Increase impact dynamics"
+        >
+          +
+        </button>
+        <span id="impactDynamicsValue" class="control-value">100</span>
+      </div>
+      <div class="control">
+        <label class="control-label" for="softHitLowCut">Soft Hit Low-Cut (%)</label>
+        <button
+          class="step-button"
+          data-slider="softHitLowCutSlider"
+          data-direction="-1"
+          aria-label="Decrease soft hit low cut"
+        >
+          -
+        </button>
+        <input
+          id="softHitLowCutSlider"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="40"
+        />
+        <button
+          class="step-button"
+          data-slider="softHitLowCutSlider"
+          data-direction="1"
+          aria-label="Increase soft hit low cut"
+        >
+          +
+        </button>
+        <span id="softHitLowCutValue" class="control-value">40</span>
+      </div>
+      <div class="control">
+        <span class="control-label">Voice Mode</span>
+        <select id="voiceModeSelect" class="voice-mode-select">
+          <option value="mono" selected>Mono (replace)</option>
+          <option value="poly">Poly (overlap)</option>
+        </select>
+      </div>
+    </div>
+
+    <section class="section-block">
+      <h2>Obstacle Volumes</h2>
+      <div id="obstacleVolumeControls" class="obstacle-volume-controls">
+        <p class="muted">No obstacles. Increase the obstacle count to edit volumes.</p>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <h2>Obstacle Positions (0–360°)</h2>
+      <div class="obstacle-positions-actions">
+        <button id="alignObstaclesToBlades" class="small-button">
+          Distribute Evenly
+        </button>
+      </div>
+      <div id="obstacleAngleTrack" class="angle-track">
+        <p class="muted">No obstacles. Increase the obstacle count to place them.</p>
+      </div>
+      <ul id="obstacleAngleList" class="angle-list">
+        <li class="muted">No obstacles.</li>
+      </ul>
+    </section>
+
+    <section class="section-block">
+      <h2>Presets</h2>
+      <div class="presets" id="presetList">
+        <div class="preset-slot">
+          <span class="preset-label">Preset 1</span>
+          <span class="preset-summary" id="presetSummary0">(empty)</span>
+          <div class="preset-actions">
+            <button class="preset-save" data-preset="0">Save</button>
+            <button class="preset-load" data-preset="0">Load</button>
+          </div>
+        </div>
+        <div class="preset-slot">
+          <span class="preset-label">Preset 2</span>
+          <span class="preset-summary" id="presetSummary1">(empty)</span>
+          <div class="preset-actions">
+            <button class="preset-save" data-preset="1">Save</button>
+            <button class="preset-load" data-preset="1">Load</button>
+          </div>
+        </div>
+        <div class="preset-slot">
+          <span class="preset-label">Preset 3</span>
+          <span class="preset-summary" id="presetSummary2">(empty)</span>
+          <div class="preset-actions">
+            <button class="preset-save" data-preset="2">Save</button>
+            <button class="preset-load" data-preset="2">Load</button>
+          </div>
+        </div>
+        <div class="preset-slot">
+          <span class="preset-label">Preset 4</span>
+          <span class="preset-summary" id="presetSummary3">(empty)</span>
+          <div class="preset-actions">
+            <button class="preset-save" data-preset="3">Save</button>
+            <button class="preset-load" data-preset="3">Load</button>
+          </div>
+        </div>
+        <div class="preset-slot">
+          <span class="preset-label">Preset 5</span>
+          <span class="preset-summary" id="presetSummary4">(empty)</span>
+          <div class="preset-actions">
+            <button class="preset-save" data-preset="4">Save</button>
+            <button class="preset-load" data-preset="4">Load</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p class="description">
+      壊れかけの換気扇のガタや擦れ具合をパラメータ化して、
+      ランダム気味のビートを楽しむ実験用ツールです。
+    </p>
+  </div>
+
+  <script defer src="main.js"></script>
+</body>
+</html>
