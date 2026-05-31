@@ -9,6 +9,42 @@ git tag v0.3.0
 git push origin v0.3.0
 -->
 
+## v2.3.4 — UI overflow and preset row polish
+
+- Fixed Obstacle Setup controls overflowing their container.
+- Shortened and constrained obstacle volume sliders so rows stay inside the card.
+- Improved preset row layout so saved preset summaries and action buttons fit cleanly.
+- Right-aligned preset action buttons and added summary truncation.
+
+## v2.3.3 — Column width balance polish
+
+- Rebalanced the desktop column widths to be closer to an even split.
+- Reduced excessive width in Obstacle Setup and Capture & Storage.
+- Gave Core Motion / Rotation Feel / Sound Design and User Samples more breathing room.
+
+## v2.3.2 — Logo and layout polish
+
+- Fixed the logo display so it no longer crops.
+- Swapped the primary columns so Core Motion / Rotation Feel / Sound Design are on the left and Obstacle Setup is on the right.
+- Replaced the footer description with a more on-brand English tagline.
+
+## v2.3.1 — UI spacing and layout polish
+
+- Reduced excessive spacing around the logo and control cards.
+- Removed the card border around the brand header.
+- Moved Obstacle Setup into the primary workbench area for faster access.
+- Prevented cards from stretching to equal heights unnecessarily.
+- Updated `PROJECT.md` with revised layout rules.
+
+## v2.3.0 — Dark UI refresh and branding
+
+- Added logo branding to the Vol.2 UI.
+- Switched the interface to a dark monochrome theme matching the logo.
+- Reorganized controls into Core Motion, Rotation Feel, Sound Design, Capture & Storage, User Samples, and Obstacle Setup.
+- Added responsive card-based layout for desktop and mobile.
+- Preserved v2.1 real-time WAV recording and v2.2 browser-local User Samples behavior.
+- Updated `PROJECT.md` with UI layout and styling rules.
+
 ## v2.2.0 — Browser-local user samples
 
 - Added browser-local user samples stored in IndexedDB.

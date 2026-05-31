@@ -48,7 +48,7 @@ const SIM_SUBSTEPS = 4;
  * Confirmed: hitThreshold is only used for gating/normalization here; hitRate logs should decrease as threshold rises.
  */
 
-const APP_VERSION = "v2.2.0";
+const APP_VERSION = "v2.3.4";
 const MAX_RECORDING_SECONDS = 120;
 const MAX_USER_SAMPLE_SECONDS = 5;
 const MAX_USER_SAMPLE_BYTES = 10 * 1024 * 1024;

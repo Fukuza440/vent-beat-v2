@@ -6,13 +6,41 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app-card">
-    <h1>Vent Fan Beat Simulator Vol.2</h1>
+  <div class="app-shell">
+    <header class="brand-header">
+      <div class="logo-frame">
+        <img
+          class="brand-logo"
+          src="assets/vent-fan-beat-logo.jpg"
+          alt="Vent Fan Beat Simulator logo"
+        />
+      </div>
+      <div class="brand-copy">
+        <h1>Vent Fan Beat Simulator</h1>
+        <p>Experimental mechanical rhythm tool</p>
+        <span>Vol.2 / v2.3.4</span>
+      </div>
+    </header>
 
-    <button id="toggleButton" class="primary">Start</button>
+    <section class="quick-controls">
+      <div>
+        <span class="eyebrow">Quick Controls</span>
+        <h2>Run the machine</h2>
+      </div>
+      <div class="quick-actions">
+        <button id="toggleButton" class="primary">Start</button>
+        <button id="recordingButton" class="small-button recording-button">
+          Start Recording
+        </button>
+        <span id="recordingTime" class="recording-time">00:00.0</span>
+        <span id="recordingStatus" class="recording-status">Ready</span>
+      </div>
+    </section>
 
-    <div class="control-group">
-      <div class="control-group-title">Rhythmic Foundation</div>
+    <main class="main-grid">
+      <div class="motion-stack">
+      <section class="section-block core-motion">
+        <h2>Core Motion</h2>
       <div class="control">
         <span class="control-label">RPM</span>
         <button
@@ -41,10 +69,6 @@
         </button>
         <span id="rpmValue" class="control-value">200</span>
       </div>
-    </div>
-
-    <div class="control-group">
-      <div class="control-group-title">Fan Geometry</div>
       <div class="control">
         <span class="control-label">Blade Count</span>
         <button
@@ -101,10 +125,10 @@
         </button>
         <span id="obstacleValue" class="control-value">3</span>
       </div>
-    </div>
+      </section>
 
-    <div class="control-group">
-      <div class="control-group-title">Rotation Dynamics</div>
+      <section class="section-block rotation-feel">
+        <h2>Rotation Feel</h2>
       <div class="control">
         <span class="control-label">Axis Jitter</span>
         <button
@@ -189,10 +213,10 @@
         </button>
         <span id="wobbleFreqValue" class="control-value">3.0</span>
       </div>
-    </div>
+      </section>
 
-    <div class="control-group">
-      <div class="control-group-title">Sound &amp; Response</div>
+      <section class="section-block sound-design">
+        <h2>Sound Design</h2>
       <div class="control">
         <span class="control-label">Hit Threshold</span>
         <button
@@ -312,78 +336,53 @@
           <option value="poly">Poly (overlap)</option>
         </select>
       </div>
-    </div>
-
-    <section class="section-block recording-section">
-      <h2>Recording</h2>
-      <div class="recording-actions">
-        <button id="recordingButton" class="small-button recording-button">
-          Start Recording
-        </button>
-        <span id="recordingTime" class="recording-time">00:00.0</span>
+      </section>
       </div>
+
+      <div class="secondary-tools">
+      <section class="section-block user-samples-section">
+        <h2>User Samples</h2>
+        <div class="user-sample-actions">
+          <label class="small-button file-button" for="userSampleInput">
+            Add Audio Files
+          </label>
+          <input
+            id="userSampleInput"
+            class="user-sample-input"
+            type="file"
+            multiple
+            accept="audio/*,.wav,.mp3"
+          />
+          <button id="clearUserSamples" class="small-button danger-button" type="button">
+            Clear All User Samples
+          </button>
+        </div>
+        <div class="user-sample-status-row">
+          <span class="user-sample-status-label">Status:</span>
+          <span id="userSampleStatus" class="user-sample-status">Ready</span>
+        </div>
+        <div id="userSampleCount" class="muted">0 user samples</div>
+        <div id="userSampleList" class="user-sample-list">
+          <p class="muted">No user samples added.</p>
+        </div>
+        <p class="muted user-sample-note">
+          User samples are stored only in this browser. Max 5 sec, 10 MB per
+          file. WAV / MP3 recommended.
+        </p>
+      </section>
+
+      <section class="section-block capture-storage">
+        <h2>Capture &amp; Storage</h2>
+        <div class="recording-detail">
+          <h3>Recording</h3>
       <div class="recording-status-row">
         <span class="recording-status-label">Status:</span>
-        <span id="recordingStatus" class="recording-status">Ready</span>
+            <span class="recording-status mirror-status">Use the quick controls above</span>
       </div>
       <p class="muted recording-note">Max 120 sec. WAV only in v2.1.</p>
-    </section>
+        </div>
 
-    <section class="section-block user-samples-section">
-      <h2>User Samples</h2>
-      <div class="user-sample-actions">
-        <label class="small-button file-button" for="userSampleInput">
-          Add Audio Files
-        </label>
-        <input
-          id="userSampleInput"
-          class="user-sample-input"
-          type="file"
-          multiple
-          accept="audio/*,.wav,.mp3"
-        />
-        <button id="clearUserSamples" class="small-button" type="button">
-          Clear All User Samples
-        </button>
-      </div>
-      <div class="user-sample-status-row">
-        <span class="user-sample-status-label">Status:</span>
-        <span id="userSampleStatus" class="user-sample-status">Ready</span>
-      </div>
-      <div id="userSampleCount" class="muted">0 user samples</div>
-      <div id="userSampleList" class="user-sample-list">
-        <p class="muted">No user samples added.</p>
-      </div>
-      <p class="muted user-sample-note">
-        User samples are stored only in this browser. Max 5 sec, 10 MB per
-        file. WAV / MP3 recommended.
-      </p>
-    </section>
-
-    <section class="section-block">
-      <h2>Obstacle Volumes</h2>
-      <div id="obstacleVolumeControls" class="obstacle-volume-controls">
-        <p class="muted">No obstacles. Increase the obstacle count to edit volumes.</p>
-      </div>
-    </section>
-
-    <section class="section-block">
-      <h2>Obstacle Positions (0–360°)</h2>
-      <div class="obstacle-positions-actions">
-        <button id="alignObstaclesToBlades" class="small-button">
-          Distribute Evenly
-        </button>
-      </div>
-      <div id="obstacleAngleTrack" class="angle-track">
-        <p class="muted">No obstacles. Increase the obstacle count to place them.</p>
-      </div>
-      <ul id="obstacleAngleList" class="angle-list">
-        <li class="muted">No obstacles.</li>
-      </ul>
-    </section>
-
-    <section class="section-block">
-      <h2>Presets</h2>
+        <h3>Presets</h3>
       <div class="presets" id="presetList">
         <div class="preset-slot">
           <span class="preset-label">Preset 1</span>
@@ -476,11 +475,38 @@
           </div>
         </div>
       </div>
-    </section>
+      </section>
+      </div>
+
+      <section class="section-block obstacle-setup">
+        <h2>Obstacle Setup</h2>
+        <div class="obstacle-grid">
+          <div class="obstacle-panel">
+            <h3>Obstacle Sample &amp; Volume</h3>
+            <div id="obstacleVolumeControls" class="obstacle-volume-controls">
+              <p class="muted">No obstacles. Increase the obstacle count to edit volumes.</p>
+            </div>
+          </div>
+          <div class="obstacle-panel">
+            <div class="obstacle-heading-row">
+              <h3>Obstacle Positions (0–360°)</h3>
+              <button id="alignObstaclesToBlades" class="small-button">
+                Distribute Evenly
+              </button>
+            </div>
+            <div id="obstacleAngleTrack" class="angle-track">
+              <p class="muted">No obstacles. Increase the obstacle count to place them.</p>
+            </div>
+            <ul id="obstacleAngleList" class="angle-list">
+              <li class="muted">No obstacles.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
 
     <p class="description">
-      壊れかけの換気扇のガタや擦れ具合をパラメータ化して、
-      ランダム気味のビートを楽しむ実験用ツールです。
+      Dial in the wobble, scrape, and rattle of a half-broken vent fan — then let it spit out beautifully unruly beats.
     </p>
   </div>
 

@@ -10,6 +10,7 @@
 - Vol.2 の位置づけ: ルート `index.html` から `./vol2/` へ誘導される現行公開版。`index_v1.html` とルート直下の `main.js` / `style.css` は旧版または比較用のコードとして残っている。
 - v2.1 の追加機能: ブラウザ上で鳴っているマスター出力を AudioWorklet 経由でリアルタイム録音し、16-bit PCM WAV としてダウンロードできる。
 - v2.2 の追加機能: ユーザーが自分の WAV/MP3 等の音源を画面から追加し、Obstacle のサンプルとして使える。追加音源はサーバーや GitHub にはアップロードされず、同じブラウザ・同じ origin の IndexedDB に保存される。
+- v2.3 の UI刷新: ロゴを上部に配置し、黒基調テーマ、カードレイアウト、Core Motion / Rotation Feel / Sound Design / Capture & Storage / User Samples / Obstacle Setup のカテゴリ整理を行った。v2.3.1 では余白を詰め、Obstacle Setup を主要作業エリアとして上部に移動した。v2.3.2 ではロゴの非クロップ表示、主要カラムの左右入れ替え、英語タグライン化を行った。v2.3.3 では desktop の左右カラム幅を半々に近づけ、User Samples 側に少し余裕を持たせた。v2.3.4 では Obstacle 行のはみ出し防止と Preset 行の3領域レイアウトを追加した。
 - バージョン運用想定: 今後の軽微な機能追加は基本的に `/vol2/` のまま育て、`PROJECT.md` やアプリ内表記で v2.1, v2.2 のように更新する。旧版を残したいほど大きな仕様変更や別コンセプトの変更のみ、`/vol3/` や別ディレクトリへの分岐を検討する。
 
 ## 2. 現在の画面構成
@@ -18,24 +19,29 @@
 
 | UI項目 | 役割 | 初期値 | 最小値/最大値/刻み | 関連する内部変数/関数 | 備考 |
 | --- | --- | --- | --- | --- | --- |
+| Header / Logo | ブランド表示 | ロゴ画像、`Vol.2 / v2.3.4` | なし | static HTML / CSS | `vol2/assets/vent-fan-beat-logo.jpg` を表示。読み込み失敗時も alt text が残る。ロゴ周りにカード枠は付けず、画像全体が切れない表示を優先する。 |
+| Quick Controls | 即時操作エリア | Start、Start Recording、timer、status | なし | `toggleButton`, `recordingButton`, `recordingTime`, `recordingStatus` | 既存IDのボタンを複製せず上部に配置。 |
+| Core Motion | 基本動作カテゴリ | なし | なし | なし | Start/Stop は Quick Controls、RPM / Blade Count / Obstacle Count はこのカード内。 |
 | Start ボタン | シミュレーションと音声を開始/停止する | `Start` | なし | `toggleButton`, `startSimulation()`, `stopSimulation()`, `ensureAudio()`, `loop()` | 開始後は `Stop` 表記。AudioContext は Start 操作後に初期化・resume される。 |
 | Rhythmic Foundation | RPM 系のグループ見出し | なし | なし | なし | UI分類用。 |
 | RPM | 回転数。羽根が障害物を通過する速度を決める | `200` | `10`-`2000`, step `1` | `state.rpm`, `stepSimulation()`, `bindSlider()` | 値変更時に `resetCollisionState()`。 |
 | Fan Geometry | 羽根・障害物数のグループ見出し | なし | なし | なし | UI分類用。 |
 | Blade Count | 羽根枚数 | `3` | `1`-`8`, step `1` | `state.bladeCount`, `resetCollisionState()`, `resetWobblePhases()` | 多いほど接触機会が増える。 |
 | Obstacle Count | 障害物数 | `3` | `0`-`8`, step `1` | `state.obstacleCount`, `rebuildObstacles()`, `obstacles` | 0 の場合は障害物編集UIに空状態メッセージを表示。 |
-| Rotation Dynamics | 回転ぶれ系のグループ見出し | なし | なし | なし | UI分類用。 |
+| Rotation Feel | 回転ぶれ系カテゴリ | なし | なし | なし | 旧 Rotation Dynamics をカテゴリ整理。 |
 | Axis Jitter | 羽根角度に加える軸ぶれ量 | `0.10` | `0`-`0.4`, step `0.01` | `state.axisJitter`, `stepSimulation()` | 正弦波ぶれとランダムノイズの振幅に使われる。 |
 | Timing Jitter (%) | ランダム成分の強さ | `30` | `0`-`100`, step `1` | `state.timingJitter`, `stepSimulation()` | 内部値は `0`-`1`。ランダムノイズ成分に掛かる。 |
 | Wobble Freq (Hz) | 軸ぶれの周期 | `3.0` | `0`-`20`, step `0.1` | `state.wobbleFreqHz`, `stepSimulation()` | `sin(wobbleOmega * simTime + phase)` の周波数。 |
-| Sound & Response | 音声応答系のグループ見出し | なし | なし | なし | UI分類用。 |
+| Sound Design | 音声応答系カテゴリ | なし | なし | なし | 旧 Sound & Response をカテゴリ整理。 |
 | Hit Threshold | ヒット判定後の発音ゲート | `0.12` | `0.02`-`0.4`, step `0.01` | `state.hitThreshold`, `registerCollision()` | `rawStrength` が閾値未満なら無音。閾値以上は正規化される。 |
 | Envelope Tail (ms) | 音量エンベロープの減衰時間 | `250` | `50`-`800`, step `10` | `state.tailMs`, `getTailSeconds()`, `playSampleHit()`, `playNoiseHit()` | 内部では秒に変換し `0.05`-`5` 秒に clamp。 |
 | Impact Dynamics (%) | ヒット強度が音量・減衰へ反映される量 | `40` | `0`-`100`, step `1` | `state.impactDynamics`, `getImpactStrength()` | 内部値は `0`-`1`。0 で強度差なし、1 で強度をそのまま反映。 |
 | Soft Hit Low-Cut (%) | 弱いヒットほど低域を削る量 | `40` | `0`-`100`, step `1` | `state.softHitLowCut`, `getSoftHitLowCutFactor()` | 内部値は `0`-`1`。弱い音ほど HPF カットオフが上がる。 |
 | Voice Mode | 重なった発音の扱い | `Mono (replace)` | `mono` / `poly` | `state.voiceMode`, `setVoiceMode()`, `stopActiveVoice()` | Mono は同一障害物の既存音を短く止める。Poly は重ねる。 |
 | Recording | マスター出力のリアルタイムWAV録音 | `Ready`, `00:00.0` | 最大 `120` 秒 | `initRecordingControls()`, `startRecording()`, `stopRecordingAndDownload()`, `encodeWavMono()` | v2.1追加。Start Recording / Stop & Download WAV、録音タイマー、ステータス、`Max 120 sec. WAV only in v2.1.` を表示。 |
+| Capture & Storage | 録音詳細とプリセットカテゴリ | なし | なし | `initPresetControls()` など | Recording detail と Presets をまとめる。 |
 | User Samples | ブラウザ内だけに保存するユーザー音源管理 | `0 user samples`, `Ready` | 最大5秒、10MB/ファイル、最大20件、概算50MB | `initUserSampleControls()`, `addUserSampleFiles()`, `previewUserSample()`, `deleteUserSample()`, `clearAllUserSamples()` | v2.2追加。Add Audio Files、Preview、Delete、Clear All、Status、ローカル保存注意書きを表示。 |
+| Obstacle Setup | 障害物設定カテゴリ | なし | なし | `renderObstacleVolumeControls()`, `renderObstacleAngleControls()` | 頻繁に触る主要作業エリアとして Quick Controls 直下に配置。desktop/mobile とも上位に置く。 |
 | Obstacle Volumes | 障害物ごとの音量・On/Off・サンプル選択 | 障害物ごと `100%`, On | 音量 `0`-`150`, step `1` | `renderObstacleVolumeControls()`, `obstacles[].volume`, `obstacles[].sampleIndex`, `obstacles[].enabled` | サンプル選択肢は `samples/manifest.json` とロード済みバッファから生成。 |
 | Obstacle Positions (0-360°) | 障害物ごとの角度編集 | 障害物数に応じて等間隔 | 角度は `0`-`360` 相当 | `renderObstacleAngleControls()`, `renderObstacleAngleList()`, `obstacles[].angle` | トラック上のつまみを pointer drag で移動。表示は `#n: xxx.x°`。 |
 | Distribute Evenly | 有効な障害物を 0-360° に等間隔配置 | なし | なし | `alignObstaclesToBlades()` | disabled の障害物は配置対象から除外される。関数名は blades だが実装は有効障害物を等分配置。 |
@@ -46,6 +52,16 @@
 | Delete | プリセットを削除 | なし | なし | `deletePreset()`, `persistPresets()` | 空スロットでは何もしない。 |
 
 注記: `impactDynamicsValue` の HTML 初期表示は `100` だが、スライダー初期値は `40` で、`bindSlider()` の初期同期により表示は `40` に更新される。
+
+v2.3.4 のレイアウト:
+
+- desktop: Header / Quick Controls の下に、左カラムへ Core Motion / Rotation Feel / Sound Design を積み、右カラムに Obstacle Setup を配置する。Primary Workbench は完全固定比率ではなく、左 46〜48% / 右 52〜54% 程度のバランスを目安にする。
+- secondary tools: User Samples / Capture & Storage は下段に並べる。User Samples はサンプル名やボタン配置の読みやすさを優先し、Capture & Storage より少し広めにしてよい。
+- mobile: Header / Quick Controls / Core Motion / Rotation Feel / Sound Design / Obstacle Setup / User Samples / Capture & Storage の1カラム。
+- カード高さは無理に揃えず、中身に応じた自然な高さにする。
+- Obstacle Setup の volume row は親カードからはみ出さないことを優先し、volume slider は必要以上に横いっぱいに伸ばさない。
+- Preset 行は `[name] [summary] [actions]` の3領域を基本とし、actions は右寄せ、summary は必要に応じて ellipsis で省略する。
+- Footer description は英語のブランドタグラインとして表示する。
 
 ## 3. 音声生成・リズム生成の仕様
 
@@ -217,10 +233,11 @@
 | `index_v1.html` | 旧版 UI の HTML | 旧版の各 UI | 現行 Pages の入口ではない。旧版を残す目的なら削除注意。 |
 | `main.js` | 旧版またはルート版の JS | Vol.2 に近い関数群 | 現行 `/vol2/` では読み込まれない。コード内に重複宣言なども見えるため、現行仕様の根拠は `vol2/main.js` を優先する。 |
 | `style.css` | 旧版またはルート版の CSS | なし | 現行 `/vol2/` では読み込まれない。 |
-| `vol2/index.html` | 現行アプリの HTML | UI要素、Recording UI、User Samples UI、`<script defer src="main.js">` | ID と `vol2/main.js` のバインドが密結合。相対パスは `style.css` と `main.js`。 |
+| `vol2/index.html` | 現行アプリの HTML | Header / Logo、Quick Controls、Core Motion、Rotation Feel、Sound Design、Capture & Storage、User Samples、Obstacle Setup、`<script defer src="main.js">` | ID と `vol2/main.js` のバインドが密結合。相対パスは `style.css` と `main.js`。同じIDの要素を複製しない。 |
 | `vol2/main.js` | 現行アプリの状態管理、UIバインド、シミュレーション、音声、プリセット、WAV録音、User Samples | `bindSlider()`, `rebuildObstacles()`, `stepSimulation()`, `registerCollision()`, `playSampleHit()`, `playNoiseHit()`, `ensureAudio()`, `initRecorderWorklet()`, `startRecording()`, `stopRecordingAndDownload()`, `encodeWavMono()`, `initUserSampleControls()`, `addUserSampleFiles()`, `previewUserSample()`, `deleteUserSample()`, `clearAllUserSamples()`, `sampleRefFromSelectValue()`, `snapshotCurrentPreset()`, `applyPreset()` | 主要ロジックが一体化している。変更時は UI ID、state、preset 保存対象、localStorage 互換、sampleRef 互換、IndexedDB fallback、録音中Stop挙動に注意。 |
 | `vol2/wav-recorder-worklet.js` | AudioWorklet の pass-through recorder | `WavRecorderProcessor`, `process()` | `masterGain -> recorderNode -> destination` の接続前提。録音中のみ PCM を mono mixdown して送る。 |
-| `vol2/style.css` | 現行アプリの light theme CSS | なし | モバイル対応は flex/wrap と `width: min(640px, 95vw)` 中心。Recording UI と User Samples UI の最小スタイルも含む。 |
+| `vol2/style.css` | 黒基調テーマ、カードレイアウト、レスポンシブUI | なし | v2.3で黒基調テーマ、v2.3.1でコンパクトな余白、枠なしブランドヘッダー、カード非ストレッチ方針を追加。v2.3.2でロゴ非クロップ表示と主要カラム左右入れ替え、v2.3.3で desktop カラム幅バランス調整、v2.3.4で Obstacle / Preset 行のはみ出し防止を追加。CSS内に Phase コメントあり。 |
+| `vol2/assets/vent-fan-beat-logo.jpg` | UI上部ロゴ画像 | なし | GitHub Pages では `/vol2/assets/vent-fan-beat-logo.jpg` として公開対象。 |
 | `samples/` | 公開用 WAV サンプルと manifest | `manifest.json` | `vol2/main.js` から `../samples/manifest.json` として参照される。相対位置変更に注意。 |
 | `samples/manifest.json` | サンプル一覧 | `file`, `label` の配列 | 現在 42 エントリ。file 名と実ファイルの一致が必要。 |
 | `samples_raw/` | 元 MP3/WAV サンプル | なし | 公開元 root 配下なので Pages 上にも置かれる可能性がある。変換元として使われる。 |
@@ -249,7 +266,7 @@
 
 - `vol2/main.js` には `preloadSampleManifestForUI()` が 2 回定義されている。後の定義が有効になる。現時点では機能変更せず記録のみ。
 - 初期化時に `loadSampleBuffers().then(...)` が `AudioContext` 引数なしで呼ばれている。実際の音声用ロードは `ensureAudio()` 内で `loadSampleBuffers(audioContext)` として行われる。機能変更はしていないため、必要なら別途検証対象。
-- `APP_VERSION` は `v2.2.0`。画面右下の `appVersion` に `Vent Fan Beat Simulator Vol.2 — v2.2.0` を表示する。
+- `APP_VERSION` は `v2.3.4`。画面右下の `appVersion` に `Vent Fan Beat Simulator Vol.2 — v2.3.4` を表示する。
 
 ## 7. GitHub Pages 公開構成
 
@@ -275,6 +292,7 @@
 - `vol2/index.html` は `style.css` と `main.js` を相対パスで読み込む。
 - `vol2/main.js` はサンプルを `../samples/manifest.json` と `../samples/<file>` から読み込むため、root 公開前提の配置になっている。
 - `vol2/wav-recorder-worklet.js` は `/vol2/` 配下の静的ファイルとして `vol2/main.js` から相対パス `wav-recorder-worklet.js` で読み込まれる。
+- ロゴ画像 `vol2/assets/vent-fan-beat-logo.jpg` は `/vol2/assets/vent-fan-beat-logo.jpg` として公開対象になる。
 - AudioWorklet は HTTPS の GitHub Pages または localhost での確認を前提とする。非対応環境では録音UIのみ disabled になる。
 - User Samples は GitHub Pages や GitHub リポジトリにはアップロードされない。同じブラウザ・同じサイト origin の IndexedDB に保存される。
 - `docs/` は存在するが、GitHub Pages の公開元ではない。公開元が root のため、静的ファイルとして URL から到達可能になる可能性はある。
@@ -356,6 +374,14 @@ git push origin main
 - 既存プリセットの `obstacleSampleIndices` fallback を壊さないこと。
 - IndexedDB 失敗時もアプリ全体が壊れないこと。
 - User Samples 削除時の Noise fallback 挙動を壊さないこと。
+- UIを追加する場合は Core Motion / Rotation Feel / Sound Design / Capture & Storage / User Samples / Obstacle Setup のカテゴリに沿って配置すること。
+- Obstacle Setup は頻繁に触るため下部に追いやらないこと。
+- カード高さを無理に揃えないこと。
+- ロゴ周りに枠線を付けないこと。
+- 余白はコンパクトに保つこと。
+- 同じIDの要素を複製しないこと。
+- 既存JSバインドを壊さないこと。
+- ロゴや黒基調テーマに合う見た目を維持すること。
 - プリセット保存対象を追加・変更する場合は、既存 localStorage データとの後方互換を考慮すること。
 - 特に `voiceMode` は現状プリセット保存対象外なので、保存対象に追加する場合は既存データの fallback を実装すること。
 - 音作り、ランダム感、壊れかけの換気扇っぽさを壊さないこと。
@@ -370,29 +396,31 @@ git push origin main
 1. `python3 -m http.server 8000` でローカルサーバーを起動する。
 2. `http://localhost:8000/vol2/` を開く。
 3. 画面が崩れていないことを確認する。
-4. Start を押して音が鳴ることを確認する。
-5. Stop を押して停止できることを確認する。
-6. RPM を変更してビート間隔が変わることを確認する。
-7. Blade Count / Obstacle Count を変更してヒット密度や UI が変わることを確認する。
-8. Axis Jitter / Timing Jitter / Wobble Freq を変更して揺らぎが変わることを確認する。
-9. Hit Threshold / Envelope Tail / Impact Dynamics / Soft Hit Low-Cut を変更して音の出方が変わることを確認する。
-10. Mono / Poly を切り替えて発音挙動が変わることを確認する。
-11. 障害物ごとの volume / enabled / sample / angle を操作できることを確認する。
-12. Distribute Evenly が動作することを確認する。
-13. Preset を Save → Load → Delete できることを確認する。
-14. リロード後も保存済みプリセットが残ること、削除済みプリセットが消えることを確認する。
-15. Start Recording を押し、停止中だった場合はシミュレーターが自動開始し、Recording timer が進むことを確認する。
-16. 録音中に RPM や Tail などを操作し、Stop & Download WAV で WAV がダウンロードされることを確認する。
-17. 録音停止後もシミュレーター再生が継続することを確認する。
-18. 録音中にアプリの Stop を押した場合、WAV が生成されてからシミュレーターが停止することを確認する。
-19. User Samples で複数の WAV/MP3 recommended file を追加できることを確認する。
-20. Preview、Delete、Clear All が動作することを確認する。
-21. リロード後に IndexedDB から User Samples が復元されることを確認する。
-22. User Sample を Obstacle に割り当てて音が鳴ること、WAV 録音にも入ることを確認する。
-23. 古い `obstacleSampleIndices` 形式のプリセットが読み込めることを確認する。
-24. User Sample 削除後、それを参照する Obstacle / Preset が Noise fallback することを確認する。
-25. DevTools Console に JavaScript エラーが出ていないことを確認する。
-26. Network タブで `style.css`, `main.js`, `wav-recorder-worklet.js`, `samples/manifest.json`, `samples/*.wav` が 404 になっていないことを確認する。
+4. ロゴが表示され、黒基調テーマになっていることを確認する。
+5. desktop 幅で2カラム + Obstacle下部フル幅、mobile 幅で1カラムになることを確認する。
+6. Start を押して音が鳴ることを確認する。
+7. Stop を押して停止できることを確認する。
+8. RPM を変更してビート間隔が変わることを確認する。
+9. Blade Count / Obstacle Count を変更してヒット密度や UI が変わることを確認する。
+10. Axis Jitter / Timing Jitter / Wobble Freq を変更して揺らぎが変わることを確認する。
+11. Hit Threshold / Envelope Tail / Impact Dynamics / Soft Hit Low-Cut を変更して音の出方が変わることを確認する。
+12. Mono / Poly を切り替えて発音挙動が変わることを確認する。
+13. 障害物ごとの volume / enabled / sample / angle を操作できることを確認する。
+14. Distribute Evenly が動作することを確認する。
+15. Preset を Save → Load → Delete できることを確認する。
+16. リロード後も保存済みプリセットが残ること、削除済みプリセットが消えることを確認する。
+17. Start Recording を押し、停止中だった場合はシミュレーターが自動開始し、Recording timer が進むことを確認する。
+18. 録音中に RPM や Tail などを操作し、Stop & Download WAV で WAV がダウンロードされることを確認する。
+19. 録音停止後もシミュレーター再生が継続することを確認する。
+20. 録音中にアプリの Stop を押した場合、WAV が生成されてからシミュレーターが停止することを確認する。
+21. User Samples で複数の WAV/MP3 recommended file を追加できることを確認する。
+22. Preview、Delete、Clear All が動作することを確認する。
+23. リロード後に IndexedDB から User Samples が復元されることを確認する。
+24. User Sample を Obstacle に割り当てて音が鳴ること、WAV 録音にも入ることを確認する。
+25. 古い `obstacleSampleIndices` 形式のプリセットが読み込めることを確認する。
+26. User Sample 削除後、それを参照する Obstacle / Preset が Noise fallback することを確認する。
+27. DevTools Console に JavaScript エラーが出ていないことを確認する。
+28. Network タブで `style.css`, `main.js`, `wav-recorder-worklet.js`, `assets/vent-fan-beat-logo.jpg`, `samples/manifest.json`, `samples/*.wav` が 404 になっていないことを確認する。
 
 ### 公開サイトスモークテスト
 
@@ -457,6 +485,12 @@ git push origin main
 - 音量正規化。
 - 先頭無音トリム。
 - storage usage 表示の改善。
+- 透過PNG/SVGロゴ対応。
+- favicon追加。
+- キーボードアサイン機能。
+- ヒットメーター/ライブ可視化。
+- 折りたたみセクション。
+- UIテーマ切替。
 - `preloadSampleManifestForUI()` の重複定義整理。
 - 初期化時の `loadSampleBuffers()` 呼び出しと AudioContext 依存の整理。
 - `.venv` や生成物の git 管理方針整理。
