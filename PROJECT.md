@@ -8,6 +8,8 @@
 - 目的: 壊れかけの換気扇のガタや擦れ具合をパラメータ化して、ランダム気味のビートを楽しむ実験用ツール。
 - 体験: 換気扇の羽根、障害物、軸ぶれ、接触強度、音声応答を操作し、機械的な擦れ・衝突からビートを生成する。
 - Vol.2 の位置づけ: ルート `index.html` から `./vol2/` へ誘導される現行公開版。`index_v1.html` とルート直下の `main.js` / `style.css` は旧版または比較用のコードとして残っている。
+- v2.1 の追加機能: ブラウザ上で鳴っているマスター出力を AudioWorklet 経由でリアルタイム録音し、16-bit PCM WAV としてダウンロードできる。
+- v2.2 の追加機能: ユーザーが自分の WAV/MP3 等の音源を画面から追加し、Obstacle のサンプルとして使える。追加音源はサーバーや GitHub にはアップロードされず、同じブラウザ・同じ origin の IndexedDB に保存される。
 - バージョン運用想定: 今後の軽微な機能追加は基本的に `/vol2/` のまま育て、`PROJECT.md` やアプリ内表記で v2.1, v2.2 のように更新する。旧版を残したいほど大きな仕様変更や別コンセプトの変更のみ、`/vol3/` や別ディレクトリへの分岐を検討する。
 
 ## 2. 現在の画面構成
@@ -32,6 +34,8 @@
 | Impact Dynamics (%) | ヒット強度が音量・減衰へ反映される量 | `40` | `0`-`100`, step `1` | `state.impactDynamics`, `getImpactStrength()` | 内部値は `0`-`1`。0 で強度差なし、1 で強度をそのまま反映。 |
 | Soft Hit Low-Cut (%) | 弱いヒットほど低域を削る量 | `40` | `0`-`100`, step `1` | `state.softHitLowCut`, `getSoftHitLowCutFactor()` | 内部値は `0`-`1`。弱い音ほど HPF カットオフが上がる。 |
 | Voice Mode | 重なった発音の扱い | `Mono (replace)` | `mono` / `poly` | `state.voiceMode`, `setVoiceMode()`, `stopActiveVoice()` | Mono は同一障害物の既存音を短く止める。Poly は重ねる。 |
+| Recording | マスター出力のリアルタイムWAV録音 | `Ready`, `00:00.0` | 最大 `120` 秒 | `initRecordingControls()`, `startRecording()`, `stopRecordingAndDownload()`, `encodeWavMono()` | v2.1追加。Start Recording / Stop & Download WAV、録音タイマー、ステータス、`Max 120 sec. WAV only in v2.1.` を表示。 |
+| User Samples | ブラウザ内だけに保存するユーザー音源管理 | `0 user samples`, `Ready` | 最大5秒、10MB/ファイル、最大20件、概算50MB | `initUserSampleControls()`, `addUserSampleFiles()`, `previewUserSample()`, `deleteUserSample()`, `clearAllUserSamples()` | v2.2追加。Add Audio Files、Preview、Delete、Clear All、Status、ローカル保存注意書きを表示。 |
 | Obstacle Volumes | 障害物ごとの音量・On/Off・サンプル選択 | 障害物ごと `100%`, On | 音量 `0`-`150`, step `1` | `renderObstacleVolumeControls()`, `obstacles[].volume`, `obstacles[].sampleIndex`, `obstacles[].enabled` | サンプル選択肢は `samples/manifest.json` とロード済みバッファから生成。 |
 | Obstacle Positions (0-360°) | 障害物ごとの角度編集 | 障害物数に応じて等間隔 | 角度は `0`-`360` 相当 | `renderObstacleAngleControls()`, `renderObstacleAngleList()`, `obstacles[].angle` | トラック上のつまみを pointer drag で移動。表示は `#n: xxx.x°`。 |
 | Distribute Evenly | 有効な障害物を 0-360° に等間隔配置 | なし | なし | `alignObstaclesToBlades()` | disabled の障害物は配置対象から除外される。関数名は blades だが実装は有効障害物を等分配置。 |
@@ -124,6 +128,30 @@
 - サンプルがない、または障害物の `sampleIndex` が `-1` / 範囲外の場合はノイズ fallback を使う。
 - `createNoiseBuffer()` は 0.3 秒の mono white noise buffer を生成する。
 
+### v2.1 WAV 録音
+
+- マスター出力は AudioWorklet recorder を通る。通常の音声出力は `sample/noise voices -> masterGain -> recorderWorkletNode -> audioContext.destination`。
+- AudioWorklet が非対応または初期化失敗した場合は `masterGain -> audioContext.destination` に戻し、録音UIを disabled にする。
+- recorder は pass-through node で、録音中だけ入力 PCM を mono mixdown してメインスレッドへ送る。
+- 録音中に RPM、Tail、Obstacle Volume、Obstacle Position、Sample、Mono/Poly などを操作した場合、その結果としてリアルタイムに鳴ったマスター出力が WAV に記録される。
+- WAV は外部ライブラリなしで `DataView` によりエンコードする。
+- WAV 仕様: 16-bit signed integer PCM、mono、sampleRate は `audioContext.sampleRate`、サンプル値は `[-1, 1]` に clamp。
+- 録音は固定長ではなく Start Recording / Stop & Download WAV 形式。最大録音時間は `MAX_RECORDING_SECONDS = 120` 秒。
+- 録音開始時にシミュレーターが停止中なら自動で Start する。録音停止時は録音だけ止め、シミュレーター再生は継続してよい。
+- 録音中にアプリの Stop を押した場合は、先に録音を停止して WAV を生成し、その後シミュレーターを停止する。
+- 現行コードでは `Math.random()` はノイズバッファ生成と Timing Jitter のランダム成分に残っている。録音は実際に鳴ったマスター出力を記録するため、ランダム/決定論の違い自体は WAV 保存上の問題にならない。
+
+### v2.2 User Samples
+
+- ユーザー音源は `File.arrayBuffer()` で読み、`audioContext.decodeAudioData()` で `AudioBuffer` 化して、既存サンプル同様に Obstacle 音源として鳴る。
+- IndexedDB には `AudioBuffer` ではなく、`id`, `name`, `mimeType`, `size`, `duration`, `createdAt`, `audioData` を保存する。起動後に再度 `decodeAudioData()` して復元する。
+- 対応UIは WAV / MP3 recommended。実装上はブラウザが `decodeAudioData()` できる audio file を受け付ける。
+- 制限は `MAX_USER_SAMPLE_SECONDS = 5`, `MAX_USER_SAMPLE_BYTES = 10 * 1024 * 1024`, `MAX_USER_SAMPLES = 20`, `APPROX_MAX_USER_SAMPLE_STORAGE_BYTES = 50 * 1024 * 1024`。
+- 5秒超過、10MB超過、20件超過、概算50MB超過はファイル単位で拒否し、他の正常ファイルは読み込める。
+- 音量正規化、先頭無音トリム、自動クロップは行わない。
+- User Sample の Preview も `masterGain` 経由で鳴るため、v2.1 WAV 録音中なら録音に入る。
+- User Sample を Obstacle に割り当てた場合も既存 sample/noise voice と同じ音声グラフに流れるため、WAV 録音に自然に含まれる。
+
 ## 4. 障害物の仕様
 
 - 内部データ構造は `obstacles` 配列。
@@ -163,6 +191,7 @@
   - `impactDynamics`
   - `obstacleVolumes`
   - `obstacleSampleIndices`
+  - `obstacleSampleRefs`
   - `obstacleEnabled`
   - `obstacleAnglesDeg`
 - 保存対象外として確認できるもの:
@@ -172,6 +201,10 @@
 - 既存プリセットへの Save は `window.confirm()` で上書き確認を行う。
 - Delete はスロットを `null` にし localStorage へ再保存する。
 - 互換性上の注意:
+  - v2.2 では `obstacleSampleRefs` を追加した。形式は `{ type: "noise" }`, `{ type: "builtin", id: "..." }`, `{ type: "user", id: "..." }`。
+  - Load 時は `obstacleSampleRefs` があれば優先する。
+  - 古いプリセットに `obstacleSampleRefs` がない場合は、既存の `obstacleSampleIndices` を後方互換 fallback として読み続ける。
+  - User Sample が削除済み、未復元、見つからない場合は Noise fallback し、console に警告を出す。
   - `applyPreset()` は一部キーがない場合に fallback するが、古いプリセットで存在しない値は現在値が残る場合がある。
   - 障害物配列系は `obstacleCount` を先に反映してから適用される。
   - `voiceMode` を将来プリセット保存対象に追加する場合、既存 localStorage データとの後方互換を考慮する必要がある。
@@ -184,14 +217,15 @@
 | `index_v1.html` | 旧版 UI の HTML | 旧版の各 UI | 現行 Pages の入口ではない。旧版を残す目的なら削除注意。 |
 | `main.js` | 旧版またはルート版の JS | Vol.2 に近い関数群 | 現行 `/vol2/` では読み込まれない。コード内に重複宣言なども見えるため、現行仕様の根拠は `vol2/main.js` を優先する。 |
 | `style.css` | 旧版またはルート版の CSS | なし | 現行 `/vol2/` では読み込まれない。 |
-| `vol2/index.html` | 現行アプリの HTML | UI要素、`<script defer src="main.js">` | ID と `vol2/main.js` のバインドが密結合。相対パスは `style.css` と `main.js`。 |
-| `vol2/main.js` | 現行アプリの状態管理、UIバインド、シミュレーション、音声、プリセット | `bindSlider()`, `rebuildObstacles()`, `stepSimulation()`, `registerCollision()`, `playSampleHit()`, `playNoiseHit()`, `ensureAudio()`, `snapshotCurrentPreset()`, `applyPreset()` | 主要ロジックが一体化している。変更時は UI ID、state、preset 保存対象、localStorage 互換に注意。 |
-| `vol2/style.css` | 現行アプリの light theme CSS | なし | モバイル対応は flex/wrap と `width: min(640px, 95vw)` 中心。 |
+| `vol2/index.html` | 現行アプリの HTML | UI要素、Recording UI、User Samples UI、`<script defer src="main.js">` | ID と `vol2/main.js` のバインドが密結合。相対パスは `style.css` と `main.js`。 |
+| `vol2/main.js` | 現行アプリの状態管理、UIバインド、シミュレーション、音声、プリセット、WAV録音、User Samples | `bindSlider()`, `rebuildObstacles()`, `stepSimulation()`, `registerCollision()`, `playSampleHit()`, `playNoiseHit()`, `ensureAudio()`, `initRecorderWorklet()`, `startRecording()`, `stopRecordingAndDownload()`, `encodeWavMono()`, `initUserSampleControls()`, `addUserSampleFiles()`, `previewUserSample()`, `deleteUserSample()`, `clearAllUserSamples()`, `sampleRefFromSelectValue()`, `snapshotCurrentPreset()`, `applyPreset()` | 主要ロジックが一体化している。変更時は UI ID、state、preset 保存対象、localStorage 互換、sampleRef 互換、IndexedDB fallback、録音中Stop挙動に注意。 |
+| `vol2/wav-recorder-worklet.js` | AudioWorklet の pass-through recorder | `WavRecorderProcessor`, `process()` | `masterGain -> recorderNode -> destination` の接続前提。録音中のみ PCM を mono mixdown して送る。 |
+| `vol2/style.css` | 現行アプリの light theme CSS | なし | モバイル対応は flex/wrap と `width: min(640px, 95vw)` 中心。Recording UI と User Samples UI の最小スタイルも含む。 |
 | `samples/` | 公開用 WAV サンプルと manifest | `manifest.json` | `vol2/main.js` から `../samples/manifest.json` として参照される。相対位置変更に注意。 |
 | `samples/manifest.json` | サンプル一覧 | `file`, `label` の配列 | 現在 42 エントリ。file 名と実ファイルの一致が必要。 |
 | `samples_raw/` | 元 MP3/WAV サンプル | なし | 公開元 root 配下なので Pages 上にも置かれる可能性がある。変換元として使われる。 |
 | `tools/prepare_samples.py` | `samples_raw` から `samples` を生成する Python ツール | `detect_leading_silence()`, `process_file()`, `main()` | pydub と ffmpeg が必要。出力 WAV と manifest を更新する。 |
-| `docs/changelog.md` | 変更履歴 | なし | v0.3.0 の Pages/Vol.2 入口変更が記録されている。 |
+| `docs/changelog.md` | 変更履歴 | なし | v2.2.0 の User Samples、v2.1.0 の WAV 録音、v0.3.0 の Pages/Vol.2 入口変更が記録されている。 |
 | `README.md` | 短いプロジェクト名 | なし | 現状は `Vent Fan Beat Sim v2` のみ。 |
 | `.gitignore` | ignore 設定 | なし | 現状 `.DS_Store` のみ。`.venv` は ignore されていない。 |
 | `.github/workflows/` | GitHub Actions workflow | なし | このリポジトリ内には存在しない。 |
@@ -208,12 +242,14 @@
 - `sampleBuffers`, `sampleMetas`: manifest と WAV decode 結果。
 - `activeVoices`: Mono mode で既存音を止めるための参照。
 - `presets`: localStorage と同期されるプリセット配列。
+- `recorderNode`, `recorderReady`, `recorderSupported`, `isRecording`, `recordedChunks`: v2.1 の WAV 録音状態。
+- `userSamples`, `userSampleDb`, `userSamplePersistenceAvailable`: v2.2 のブラウザ内ユーザー音源状態。
 
 ### 実装上の注意として確認できた点
 
 - `vol2/main.js` には `preloadSampleManifestForUI()` が 2 回定義されている。後の定義が有効になる。現時点では機能変更せず記録のみ。
 - 初期化時に `loadSampleBuffers().then(...)` が `AudioContext` 引数なしで呼ばれている。実際の音声用ロードは `ensureAudio()` 内で `loadSampleBuffers(audioContext)` として行われる。機能変更はしていないため、必要なら別途検証対象。
-- `APP_VERSION` は `v0.3.0`。画面右下の `appVersion` に `Vent Fan Beat Simulator Vol.2 — v0.3.0` を表示する。
+- `APP_VERSION` は `v2.2.0`。画面右下の `appVersion` に `Vent Fan Beat Simulator Vol.2 — v2.2.0` を表示する。
 
 ## 7. GitHub Pages 公開構成
 
@@ -238,6 +274,9 @@
 - `/vol2/` 配下に実アプリの `index.html`, `main.js`, `style.css` がある。
 - `vol2/index.html` は `style.css` と `main.js` を相対パスで読み込む。
 - `vol2/main.js` はサンプルを `../samples/manifest.json` と `../samples/<file>` から読み込むため、root 公開前提の配置になっている。
+- `vol2/wav-recorder-worklet.js` は `/vol2/` 配下の静的ファイルとして `vol2/main.js` から相対パス `wav-recorder-worklet.js` で読み込まれる。
+- AudioWorklet は HTTPS の GitHub Pages または localhost での確認を前提とする。非対応環境では録音UIのみ disabled になる。
+- User Samples は GitHub Pages や GitHub リポジトリにはアップロードされない。同じブラウザ・同じサイト origin の IndexedDB に保存される。
 - `docs/` は存在するが、GitHub Pages の公開元ではない。公開元が root のため、静的ファイルとして URL から到達可能になる可能性はある。
 - `.github/workflows/` は存在しないため、このリポジトリのコード上には Pages 用 GitHub Actions workflow は確認できない。
 - ユーザー確認済み設定では `gh-pages` ブランチ公開ではなく、`main` ブランチ root の branch 公開方式。
@@ -311,6 +350,12 @@ git push origin main
 - 旧版を残したいほど大きな変更や別コンセプト化を行う場合のみ、`/vol3/` や別ディレクトリ化を検討すること。
 - GitHub Pages は `main` ブランチ root 公開なので、root 直下のファイル配置や相対パスを壊さないこと。
 - `vol2/main.js` から `../samples/manifest.json` と `../samples/*.wav` を参照しているため、`samples` 配置を変える場合は参照パスも確認すること。
+- 録音機能を変更する場合は、音声グラフの `masterGain -> recorderNode -> destination` の接続を壊さないこと。
+- 録音中の Stop 挙動、120秒上限、WAV エンコード仕様を壊さないこと。
+- sampleRef 互換を壊さないこと。
+- 既存プリセットの `obstacleSampleIndices` fallback を壊さないこと。
+- IndexedDB 失敗時もアプリ全体が壊れないこと。
+- User Samples 削除時の Noise fallback 挙動を壊さないこと。
 - プリセット保存対象を追加・変更する場合は、既存 localStorage データとの後方互換を考慮すること。
 - 特に `voiceMode` は現状プリセット保存対象外なので、保存対象に追加する場合は既存データの fallback を実装すること。
 - 音作り、ランダム感、壊れかけの換気扇っぽさを壊さないこと。
@@ -336,8 +381,18 @@ git push origin main
 12. Distribute Evenly が動作することを確認する。
 13. Preset を Save → Load → Delete できることを確認する。
 14. リロード後も保存済みプリセットが残ること、削除済みプリセットが消えることを確認する。
-15. DevTools Console に JavaScript エラーが出ていないことを確認する。
-16. Network タブで `style.css`, `main.js`, `samples/manifest.json`, `samples/*.wav` が 404 になっていないことを確認する。
+15. Start Recording を押し、停止中だった場合はシミュレーターが自動開始し、Recording timer が進むことを確認する。
+16. 録音中に RPM や Tail などを操作し、Stop & Download WAV で WAV がダウンロードされることを確認する。
+17. 録音停止後もシミュレーター再生が継続することを確認する。
+18. 録音中にアプリの Stop を押した場合、WAV が生成されてからシミュレーターが停止することを確認する。
+19. User Samples で複数の WAV/MP3 recommended file を追加できることを確認する。
+20. Preview、Delete、Clear All が動作することを確認する。
+21. リロード後に IndexedDB から User Samples が復元されることを確認する。
+22. User Sample を Obstacle に割り当てて音が鳴ること、WAV 録音にも入ることを確認する。
+23. 古い `obstacleSampleIndices` 形式のプリセットが読み込めることを確認する。
+24. User Sample 削除後、それを参照する Obstacle / Preset が Noise fallback することを確認する。
+25. DevTools Console に JavaScript エラーが出ていないことを確認する。
+26. Network タブで `style.css`, `main.js`, `wav-recorder-worklet.js`, `samples/manifest.json`, `samples/*.wav` が 404 になっていないことを確認する。
 
 ### 公開サイトスモークテスト
 
@@ -345,8 +400,10 @@ git push origin main
 2. `/vol2/` に誘導されることを確認する。
 3. `https://fukuza440.github.io/vent-beat-v2/vol2/` に直接アクセスできることを確認する。
 4. ローカルスモークテストと同じ主要操作を公開サイトでも確認する。
-5. DevTools Console に JavaScript エラーがないことを確認する。
-6. Network タブで CSS / JS / samples の読み込みが 404 になっていないことを確認する。
+5. Start Recording / Stop & Download WAV で WAV がダウンロードされ、再生できることを確認する。
+6. User Samples が IndexedDB に保存され、GitHub へアップロードされないことを確認する。
+7. DevTools Console に JavaScript エラーがないことを確認する。
+8. Network タブで CSS / JS / worklet / samples の読み込みが 404 になっていないことを確認する。
 
 ## 12. 現在の制約・注意点
 
@@ -387,6 +444,19 @@ git push origin main
 - 現在のヒット密度や BPM 相当の表示。
 - サンプルカテゴリ別フィルタ。
 - サンプルロード状態の UI 表示。
+- MP3書き出し。
+- MIDI書き出し。
+- Project JSON / automation log 書き出し。
+- Project Pack Export。
+- ユーザー音源込みの共有/エクスポート。
+- Stems書き出し。
+- 録音時間上限の UI 設定化。
+- stereo WAV 対応。
+- 音源名編集。
+- 波形プレビュー。
+- 音量正規化。
+- 先頭無音トリム。
+- storage usage 表示の改善。
 - `preloadSampleManifestForUI()` の重複定義整理。
 - 初期化時の `loadSampleBuffers()` 呼び出しと AudioContext 依存の整理。
 - `.venv` や生成物の git 管理方針整理。

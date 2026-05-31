@@ -314,6 +314,52 @@
       </div>
     </div>
 
+    <section class="section-block recording-section">
+      <h2>Recording</h2>
+      <div class="recording-actions">
+        <button id="recordingButton" class="small-button recording-button">
+          Start Recording
+        </button>
+        <span id="recordingTime" class="recording-time">00:00.0</span>
+      </div>
+      <div class="recording-status-row">
+        <span class="recording-status-label">Status:</span>
+        <span id="recordingStatus" class="recording-status">Ready</span>
+      </div>
+      <p class="muted recording-note">Max 120 sec. WAV only in v2.1.</p>
+    </section>
+
+    <section class="section-block user-samples-section">
+      <h2>User Samples</h2>
+      <div class="user-sample-actions">
+        <label class="small-button file-button" for="userSampleInput">
+          Add Audio Files
+        </label>
+        <input
+          id="userSampleInput"
+          class="user-sample-input"
+          type="file"
+          multiple
+          accept="audio/*,.wav,.mp3"
+        />
+        <button id="clearUserSamples" class="small-button" type="button">
+          Clear All User Samples
+        </button>
+      </div>
+      <div class="user-sample-status-row">
+        <span class="user-sample-status-label">Status:</span>
+        <span id="userSampleStatus" class="user-sample-status">Ready</span>
+      </div>
+      <div id="userSampleCount" class="muted">0 user samples</div>
+      <div id="userSampleList" class="user-sample-list">
+        <p class="muted">No user samples added.</p>
+      </div>
+      <p class="muted user-sample-note">
+        User samples are stored only in this browser. Max 5 sec, 10 MB per
+        file. WAV / MP3 recommended.
+      </p>
+    </section>
+
     <section class="section-block">
       <h2>Obstacle Volumes</h2>
       <div id="obstacleVolumeControls" class="obstacle-volume-controls">

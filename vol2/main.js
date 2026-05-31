@@ -48,7 +48,15 @@ const SIM_SUBSTEPS = 4;
  * Confirmed: hitThreshold is only used for gating/normalization here; hitRate logs should decrease as threshold rises.
  */
 
-const APP_VERSION = "v0.2.0";
+const APP_VERSION = "v2.2.0";
+const MAX_RECORDING_SECONDS = 120;
+const MAX_USER_SAMPLE_SECONDS = 5;
+const MAX_USER_SAMPLE_BYTES = 10 * 1024 * 1024;
+const MAX_USER_SAMPLES = 20;
+const APPROX_MAX_USER_SAMPLE_STORAGE_BYTES = 50 * 1024 * 1024;
+const USER_SAMPLE_DB_NAME = "ventBeatSimVol2.userSamples";
+const USER_SAMPLE_DB_VERSION = 1;
+const USER_SAMPLE_STORE = "samples";
 
 const state = {
   running: false,
@@ -78,15 +86,40 @@ const obstacleVolumeContainer =
   document.getElementById("obstacleVolumeControls");
 const angleTrack = document.getElementById("obstacleAngleTrack");
 const angleList = document.getElementById("obstacleAngleList");
+const recordingButton = document.getElementById("recordingButton");
+const recordingTimeEl = document.getElementById("recordingTime");
+const recordingStatusEl = document.getElementById("recordingStatus");
+const userSampleInput = document.getElementById("userSampleInput");
+const userSampleStatusEl = document.getElementById("userSampleStatus");
+const userSampleCountEl = document.getElementById("userSampleCount");
+const userSampleListEl = document.getElementById("userSampleList");
+const clearUserSamplesButton = document.getElementById("clearUserSamples");
 const MAX_PRESETS = 10;
 const presets = new Array(MAX_PRESETS).fill(null);
 const presetSummaryEls = [];
 let sampleBuffers = [];
 let sampleMetas = [];
+let userSamples = [];
+let userSampleDb = null;
+let userSamplePersistenceAvailable = false;
 const activeVoices = {
   sample: [],
   noise: [],
 };
+let audioContext = null;
+let masterGain = null;
+let noiseBuffer = null;
+let audioReadyPromise = null;
+let recorderNode = null;
+let recorderReady = false;
+let recorderSupported =
+  typeof window !== "undefined" && "AudioWorkletNode" in window;
+let isRecording = false;
+let recordingStartedAt = 0;
+let recordingTimerId = null;
+let recordedChunks = [];
+let recordedSampleRate = null;
+let recordingFileCounter = 0;
 
 function smallestAngleDiff(a, b) {
   let d = a - b;
@@ -125,18 +158,122 @@ function getTailSeconds() {
 }
 
 function getSampleOptions() {
-  const count = Array.isArray(sampleBuffers) ? sampleBuffers.length : 0;
-  if (count === 0) {
-    return [{ value: -1, label: "Noise" }];
+  const count = Math.max(
+    Array.isArray(sampleMetas) ? sampleMetas.length : 0,
+    Array.isArray(sampleBuffers) ? sampleBuffers.length : 0
+  );
+  const options = [
+    {
+      group: "Noise",
+      options: [{ value: "noise", label: "Noise" }],
+    },
+  ];
+
+  if (userSamples.length > 0) {
+    options.push({
+      group: "User Samples",
+      options: userSamples.map((sample, index) => ({
+        value: sampleRefToSelectValue({ type: "user", id: sample.id }),
+        label: `User ${index + 1}: ${sample.name}`,
+      })),
+    });
   }
-  const options = [];
+
+  const builtInOptions = [];
   for (let i = 0; i < count; i += 1) {
     const meta = sampleMetas[i];
     const baseLabel = meta && meta.label ? meta.label : `Sample ${i + 1}`;
-    options.push({ value: i, label: `${i + 1}: ${baseLabel}` });
+    const file = meta && meta.file ? meta.file : null;
+    builtInOptions.push({
+      value: sampleRefToSelectValue(
+        file ? { type: "builtin", id: file } : sampleRefFromLegacyIndex(i)
+      ),
+      label: `${i + 1}: ${baseLabel}`,
+    });
   }
-  options.push({ value: -1, label: "Noise" });
+  if (builtInOptions.length > 0) {
+    options.push({
+      group: "Built-in Samples",
+      options: builtInOptions,
+    });
+  }
   return options;
+}
+
+function sampleRefFromLegacyIndex(index) {
+  if (index < 0) return { type: "noise" };
+  const meta = sampleMetas[index];
+  if (meta && meta.file) {
+    return { type: "builtin", id: meta.file };
+  }
+  return { type: "builtin", index };
+}
+
+function normalizeSampleRef(ref) {
+  if (!ref || typeof ref !== "object") return null;
+  if (ref.type === "noise") return { type: "noise" };
+  if (ref.type === "builtin") {
+    if (typeof ref.id === "string") return { type: "builtin", id: ref.id };
+    if (typeof ref.index === "number") return sampleRefFromLegacyIndex(ref.index);
+  }
+  if (ref.type === "user" && typeof ref.id === "string") {
+    return { type: "user", id: ref.id };
+  }
+  return null;
+}
+
+function sampleRefToSelectValue(ref) {
+  const normalized = normalizeSampleRef(ref) || { type: "noise" };
+  if (normalized.type === "noise") return "noise";
+  if (normalized.type === "builtin") {
+    return `builtin:${encodeURIComponent(normalized.id ?? "")}`;
+  }
+  if (normalized.type === "user") {
+    return `user:${encodeURIComponent(normalized.id)}`;
+  }
+  return "noise";
+}
+
+function sampleRefFromSelectValue(value) {
+  if (value === "noise" || value === "-1") return { type: "noise" };
+  if (value.startsWith("builtin:")) {
+    return { type: "builtin", id: decodeURIComponent(value.slice(8)) };
+  }
+  if (value.startsWith("user:")) {
+    return { type: "user", id: decodeURIComponent(value.slice(5)) };
+  }
+  const legacyIndex = Number.parseInt(value, 10);
+  if (!Number.isNaN(legacyIndex)) {
+    return legacyIndex < 0 ? { type: "noise" } : sampleRefFromLegacyIndex(legacyIndex);
+  }
+  return { type: "noise" };
+}
+
+function getObstacleSampleRef(obstacle) {
+  const fromRef = normalizeSampleRef(obstacle?.sampleRef);
+  if (fromRef) return fromRef;
+  const legacy =
+    obstacle && typeof obstacle.sampleIndex === "number"
+      ? obstacle.sampleIndex
+      : 0;
+  return sampleRefFromLegacyIndex(legacy);
+}
+
+function getLegacyIndexForSampleRef(ref) {
+  const normalized = normalizeSampleRef(ref);
+  if (!normalized || normalized.type === "noise") return -1;
+  if (normalized.type === "user") return -1;
+  const index = sampleMetas.findIndex((meta) => meta.file === normalized.id);
+  return index >= 0 ? index : -1;
+}
+
+function getBuiltinSampleIndexByRef(ref) {
+  const normalized = normalizeSampleRef(ref);
+  if (!normalized || normalized.type !== "builtin") return -1;
+  if (typeof normalized.id === "string") {
+    return sampleMetas.findIndex((meta) => meta.file === normalized.id);
+  }
+  return -1;
 }
 
 // ===== スライダーと表示のバインド =====
@@ -178,6 +315,7 @@ function rebuildObstacles() {
     volume: obs.volume ?? 1,
     sampleIndex:
       typeof obs.sampleIndex === "number" ? obs.sampleIndex : 0,
+    sampleRef: normalizeSampleRef(obs.sampleRef),
     enabled: obs.enabled !== false,
   }));
   obstacles = [];
@@ -209,6 +347,12 @@ function rebuildObstacles() {
           : availableSamples > 0
           ? i % availableSamples
           : -1,
+      sampleRef:
+        preserved && preserved.sampleRef
+          ? preserved.sampleRef
+          : availableSamples > 0
+          ? sampleRefFromLegacyIndex(i % availableSamples)
+          : { type: "noise" },
       volume: preserved ? preserved.volume : 1,
       enabled: preserved ? preserved.enabled !== false : true,
     });
@@ -317,6 +461,8 @@ attachStepButtons();
 initPresetControls();
 initVoiceModeSelector();
 initObstaclePositionControls();
+initRecordingControls();
+initUserSampleControls();
 
 function attachStepButtons() {
   const buttons = document.querySelectorAll(
@@ -450,21 +596,33 @@ function renderObstacleVolumeControls() {
       valueEl.textContent = formatVolumeLabel(volumeFactor);
     });
 
-  const select = document.createElement("select");
-  sampleOptions.forEach((option) => {
-    const opt = document.createElement("option");
-    opt.value = `${option.value}`;
-    opt.textContent = option.label;
-    select.appendChild(opt);
-  });
-  const currentSample =
-    typeof obstacle.sampleIndex === "number" ? obstacle.sampleIndex : 0;
-  select.value = `${currentSample}`;
-  select.addEventListener("change", () => {
-    const parsed = Number.parseInt(select.value, 10);
-    if (Number.isNaN(parsed)) return;
-    obstacle.sampleIndex = parsed;
-  });
+    const select = document.createElement("select");
+    sampleOptions.forEach((group) => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.group;
+      group.options.forEach((option) => {
+        const opt = document.createElement("option");
+        opt.value = option.value;
+        opt.textContent = option.label;
+        optgroup.appendChild(opt);
+      });
+      select.appendChild(optgroup);
+    });
+    const currentRef = getObstacleSampleRef(obstacle);
+    select.value = sampleRefToSelectValue(currentRef);
+    if (!select.value) {
+      select.value = "noise";
+      obstacle.sampleRef = { type: "noise" };
+      obstacle.sampleIndex = -1;
+    }
+    select.addEventListener("change", () => {
+      const ref = sampleRefFromSelectValue(select.value);
+      obstacle.sampleRef = ref;
+      obstacle.sampleIndex = getLegacyIndexForSampleRef(ref);
+      if (ref.type === "user" && !findUserSampleById(ref.id)) {
+        console.warn("[user-samples] selected user sample is missing", ref.id);
+      }
+    });
 
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -503,6 +661,23 @@ function applyObstacleSamples(sampleIndices = []) {
     const idx = sampleIndices[i];
     if (typeof idx === "number") {
       obstacles[i].sampleIndex = idx;
+      obstacles[i].sampleRef = sampleRefFromLegacyIndex(idx);
+    }
+  }
+}
+
+function applyObstacleSampleRefs(sampleRefs = []) {
+  for (let i = 0; i < obstacles.length; i += 1) {
+    const ref = normalizeSampleRef(sampleRefs[i]);
+    if (ref) {
+      obstacles[i].sampleRef = ref;
+      obstacles[i].sampleIndex = getLegacyIndexForSampleRef(ref);
+      if (ref.type === "user" && !findUserSampleById(ref.id)) {
+        console.warn(
+          "[user-samples] preset references a missing user sample; noise fallback will be used",
+          ref.id
+        );
+      }
     }
   }
 }
@@ -685,6 +860,7 @@ function snapshotCurrentPreset() {
       (obs) =>
         (typeof obs.sampleIndex === "number" ? obs.sampleIndex : 0)
     ),
+    obstacleSampleRefs: obstacles.map((obs) => getObstacleSampleRef(obs)),
     obstacleEnabled: obstacles.map((obs) => obs.enabled !== false),
     obstacleAnglesDeg: obstacles.map((obs) =>
       normalizeDegrees(radiansToDegrees(obs.angle ?? 0))
@@ -741,7 +917,11 @@ function applyPreset(preset) {
   }
   setSliderValue("obstacleSlider", preset.obstacleCount);
   applyObstacleVolumes(preset.obstacleVolumes || []);
-  applyObstacleSamples(preset.obstacleSampleIndices || []);
+  if (Array.isArray(preset.obstacleSampleRefs)) {
+    applyObstacleSampleRefs(preset.obstacleSampleRefs);
+  } else {
+    applyObstacleSamples(preset.obstacleSampleIndices || []);
+  }
   applyObstacleEnabled(preset.obstacleEnabled || []);
   applyObstacleAngles(preset.obstacleAnglesDeg || []);
   refreshObstacleUI();
@@ -818,12 +998,688 @@ function initPresetControls() {
   updatePresetSummaries();
 }
 
-// ===== Web Audio の準備 =====
+// ===== User Samples =====
 
-let audioContext = null;
-let masterGain = null;
-let noiseBuffer = null;
-let audioReadyPromise = null;
+function setUserSampleStatus(message, stateClass = "") {
+  if (!userSampleStatusEl) return;
+  userSampleStatusEl.textContent = message;
+  userSampleStatusEl.classList.remove("is-error", "is-ok");
+  if (stateClass) {
+    userSampleStatusEl.classList.add(stateClass);
+  }
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value >= 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (value >= 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${value} B`;
+}
+
+function formatDuration(seconds) {
+  const value = Number(seconds) || 0;
+  return `${value.toFixed(2)} sec`;
+}
+
+function findUserSampleById(id) {
+  return userSamples.find((sample) => sample.id === id) || null;
+}
+
+function getApproxUserSampleStorageBytes() {
+  return userSamples.reduce((sum, sample) => sum + (sample.size || 0), 0);
+}
+
+function renderUserSamples() {
+  if (userSampleCountEl) {
+    userSampleCountEl.textContent = `${userSamples.length} user sample${
+      userSamples.length === 1 ? "" : "s"
+    }`;
+  }
+  if (!userSampleListEl) return;
+  userSampleListEl.innerHTML = "";
+  if (!userSamples.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "No user samples added.";
+    userSampleListEl.appendChild(p);
+    return;
+  }
+
+  userSamples.forEach((sample, index) => {
+    const row = document.createElement("div");
+    row.className = "user-sample-row";
+
+    const info = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "user-sample-name";
+    name.textContent = `User ${index + 1}: ${sample.name}`;
+    const meta = document.createElement("div");
+    meta.className = "user-sample-meta";
+    meta.textContent = `${formatDuration(sample.duration)} / ${formatBytes(
+      sample.size
+    )}`;
+    info.append(name, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "user-sample-row-actions";
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "small-button";
+    preview.textContent = "Preview";
+    preview.addEventListener("click", () => {
+      previewUserSample(sample.id).catch((err) => {
+        console.error("[user-samples] preview failed", err);
+        setUserSampleStatus("Preview failed.", "is-error");
+      });
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "small-button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      deleteUserSample(sample.id).catch((err) => {
+        console.error("[user-samples] delete failed", err);
+        setUserSampleStatus("Delete failed.", "is-error");
+      });
+    });
+    actions.append(preview, del);
+
+    row.append(info, actions);
+    userSampleListEl.appendChild(row);
+  });
+}
+
+function initUserSampleControls() {
+  if (userSampleInput) {
+    userSampleInput.addEventListener("change", () => {
+      const files = Array.from(userSampleInput.files || []);
+      userSampleInput.value = "";
+      addUserSampleFiles(files).catch((err) => {
+        console.error("[user-samples] add failed", err);
+        setUserSampleStatus("Failed to add user samples.", "is-error");
+      });
+    });
+  }
+  if (clearUserSamplesButton) {
+    clearUserSamplesButton.addEventListener("click", () => {
+      clearAllUserSamples().catch((err) => {
+        console.error("[user-samples] clear failed", err);
+        setUserSampleStatus("Clear failed.", "is-error");
+      });
+    });
+  }
+  renderUserSamples();
+  initUserSamplePersistence().catch((err) => {
+    console.warn("[user-samples] persistence unavailable", err);
+    userSamplePersistenceAvailable = false;
+    setUserSampleStatus(
+      "Persistent storage unavailable. User samples will be kept for this session only.",
+      "is-error"
+    );
+  });
+}
+
+async function initUserSamplePersistence() {
+  if (!("indexedDB" in window)) {
+    throw new Error("IndexedDB is not available.");
+  }
+  userSampleDb = await openUserSampleDb();
+  userSamplePersistenceAvailable = true;
+  const records = await getAllUserSampleRecords();
+  userSamples = records.map((record) => ({
+    ...record,
+    buffer: null,
+  }));
+  renderUserSamples();
+  refreshObstacleUI();
+  setUserSampleStatus(
+    userSamples.length
+      ? `Restored ${userSamples.length} user sample(s).`
+      : "Ready",
+    userSamples.length ? "is-ok" : ""
+  );
+}
+
+function openUserSampleDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(
+      USER_SAMPLE_DB_NAME,
+      USER_SAMPLE_DB_VERSION
+    );
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(USER_SAMPLE_STORE)) {
+        db.createObjectStore(USER_SAMPLE_STORE, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function getUserSampleStore(mode = "readonly") {
+  if (!userSampleDb) return null;
+  return userSampleDb.transaction(USER_SAMPLE_STORE, mode).objectStore(USER_SAMPLE_STORE);
+}
+
+function getAllUserSampleRecords() {
+  return new Promise((resolve, reject) => {
+    const store = getUserSampleStore("readonly");
+    if (!store) {
+      resolve([]);
+      return;
+    }
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function putUserSampleRecord(record) {
+  if (!userSamplePersistenceAvailable) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const store = getUserSampleStore("readwrite");
+    if (!store) {
+      resolve();
+      return;
+    }
+    const request = store.put(record);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteUserSampleRecord(id) {
+  if (!userSamplePersistenceAvailable) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const store = getUserSampleStore("readwrite");
+    if (!store) {
+      resolve();
+      return;
+    }
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function clearUserSampleRecords() {
+  if (!userSamplePersistenceAvailable) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const store = getUserSampleStore("readwrite");
+    if (!store) {
+      resolve();
+      return;
+    }
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function addUserSampleFiles(files) {
+  if (!files.length) return;
+  const messages = [];
+  for (const file of files) {
+    if (userSamples.length >= MAX_USER_SAMPLES) {
+      messages.push(`${file.name}: rejected, max ${MAX_USER_SAMPLES} user samples.`);
+      continue;
+    }
+    if (file.size > MAX_USER_SAMPLE_BYTES) {
+      messages.push(`${file.name}: rejected, file is over 10 MB.`);
+      continue;
+    }
+    if (
+      getApproxUserSampleStorageBytes() + file.size >
+      APPROX_MAX_USER_SAMPLE_STORAGE_BYTES
+    ) {
+      messages.push(`${file.name}: rejected, user sample storage is over 50 MB.`);
+      continue;
+    }
+
+    try {
+      await ensureAudio();
+      if (!audioContext) throw new Error("AudioContext is not available.");
+      const audioData = await file.arrayBuffer();
+      const buffer = await audioContext.decodeAudioData(audioData.slice(0));
+      if (buffer.duration > MAX_USER_SAMPLE_SECONDS) {
+        messages.push(`${file.name}: rejected, duration is over 5 sec.`);
+        continue;
+      }
+      const record = {
+        id: createUserSampleId(),
+        name: file.name,
+        mimeType: file.type || "audio/unknown",
+        size: file.size,
+        duration: buffer.duration,
+        createdAt: new Date().toISOString(),
+        audioData,
+      };
+      try {
+        await putUserSampleRecord(record);
+      } catch (err) {
+        console.warn("[user-samples] persistence failed; keeping session only", err);
+        userSamplePersistenceAvailable = false;
+        userSampleDb = null;
+      }
+      userSamples.push({ ...record, buffer });
+      messages.push(`${file.name}: added.`);
+    } catch (err) {
+      console.warn("[user-samples] failed to add", file.name, err);
+      messages.push(`${file.name}: failed to decode.`);
+    }
+  }
+
+  renderUserSamples();
+  refreshObstacleUI();
+  setUserSampleStatus(messages.join(" "), messages.some((m) => m.includes("rejected") || m.includes("failed")) ? "is-error" : "is-ok");
+}
+
+function createUserSampleId() {
+  const random =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `user_sample_${random}`;
+}
+
+async function ensureUserSampleBuffer(sample) {
+  if (sample.buffer) return sample.buffer;
+  if (!sample.audioData) return null;
+  await ensureAudio();
+  if (!audioContext) return null;
+  sample.buffer = await audioContext.decodeAudioData(sample.audioData.slice(0));
+  return sample.buffer;
+}
+
+async function decodeUserSamplesForAudio() {
+  if (!audioContext || !userSamples.length) return;
+  for (const sample of userSamples) {
+    if (sample.buffer || !sample.audioData) continue;
+    try {
+      sample.buffer = await audioContext.decodeAudioData(sample.audioData.slice(0));
+    } catch (err) {
+      console.warn("[user-samples] failed to restore decoded buffer", sample.name, err);
+    }
+  }
+}
+
+async function previewUserSample(id) {
+  const sample = findUserSampleById(id);
+  if (!sample) {
+    setUserSampleStatus("User sample not found.", "is-error");
+    return;
+  }
+  const buffer = await ensureUserSampleBuffer(sample);
+  if (!buffer) {
+    setUserSampleStatus("Preview failed.", "is-error");
+    return;
+  }
+  if (audioContext) {
+    await audioContext.resume();
+  }
+  playPreviewBuffer(buffer);
+  setUserSampleStatus(`Previewing ${sample.name}.`, "is-ok");
+}
+
+function playPreviewBuffer(buffer) {
+  const ctx = audioContext;
+  if (!ctx || !masterGain) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.8;
+  src.connect(gain).connect(masterGain);
+  src.start(ctx.currentTime);
+  src.stop(ctx.currentTime + Math.min(buffer.duration, MAX_USER_SAMPLE_SECONDS));
+}
+
+async function deleteUserSample(id) {
+  await deleteUserSampleRecord(id);
+  userSamples = userSamples.filter((sample) => sample.id !== id);
+  replaceMissingUserSampleRefs();
+  renderUserSamples();
+  refreshObstacleUI();
+  setUserSampleStatus("User sample deleted.", "is-ok");
+}
+
+async function clearAllUserSamples() {
+  await clearUserSampleRecords();
+  userSamples = [];
+  replaceMissingUserSampleRefs();
+  renderUserSamples();
+  refreshObstacleUI();
+  setUserSampleStatus("All user samples cleared.", "is-ok");
+}
+
+function replaceMissingUserSampleRefs() {
+  obstacles.forEach((obstacle) => {
+    const ref = normalizeSampleRef(obstacle.sampleRef);
+    if (ref && ref.type === "user" && !findUserSampleById(ref.id)) {
+      obstacle.sampleRef = { type: "noise" };
+      obstacle.sampleIndex = -1;
+    }
+  });
+}
+
+// ===== WAV Recording =====
+
+function setRecordingStatus(message, stateClass = "") {
+  if (!recordingStatusEl) return;
+  recordingStatusEl.textContent = message;
+  recordingStatusEl.classList.remove("is-recording", "is-error");
+  if (stateClass) {
+    recordingStatusEl.classList.add(stateClass);
+  }
+}
+
+function formatRecordingTime(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const wholeSeconds = Math.floor(safeSeconds % 60);
+  const tenths = Math.floor((safeSeconds - Math.floor(safeSeconds)) * 10);
+  return `${String(minutes).padStart(2, "0")}:${String(
+    wholeSeconds
+  ).padStart(2, "0")}.${tenths}`;
+}
+
+function updateRecordingTimer() {
+  if (!recordingTimeEl) return;
+  const elapsed = isRecording
+    ? (performance.now() - recordingStartedAt) / 1000
+    : 0;
+  recordingTimeEl.textContent = formatRecordingTime(elapsed);
+  if (isRecording && elapsed >= MAX_RECORDING_SECONDS) {
+    stopRecordingAndDownload("max-duration").catch((err) => {
+      console.error("[recording] auto-stop failed", err);
+      setRecordingStatus("Recording failed.", "is-error");
+    });
+  }
+}
+
+function updateRecordingButton() {
+  if (!recordingButton) return;
+  recordingButton.classList.toggle("is-recording", isRecording);
+  if (!recorderSupported) {
+    recordingButton.disabled = true;
+    recordingButton.textContent = "Start Recording";
+    return;
+  }
+  recordingButton.disabled = false;
+  recordingButton.textContent = isRecording
+    ? "Stop & Download WAV"
+    : "Start Recording";
+}
+
+function setRecordingSupported(supported) {
+  recorderSupported = supported;
+  if (!supported) {
+    setRecordingStatus("Recording is not supported in this browser.", "is-error");
+  } else if (!isRecording) {
+    setRecordingStatus("Ready");
+  }
+  updateRecordingButton();
+}
+
+async function initRecorderWorklet() {
+  if (!audioContext || !masterGain) return false;
+  if (recorderReady && recorderNode) return true;
+
+  if (!audioContext.audioWorklet || typeof AudioWorkletNode === "undefined") {
+    recorderReady = false;
+    setRecordingSupported(false);
+    connectMasterDirect();
+    return false;
+  }
+
+  try {
+    await audioContext.audioWorklet.addModule("wav-recorder-worklet.js");
+    recorderNode = new AudioWorkletNode(
+      audioContext,
+      "wav-recorder-processor",
+      {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+      }
+    );
+    recorderNode.port.onmessage = handleRecorderMessage;
+    recorderNode.onprocessorerror = (event) => {
+      console.error("[recording] AudioWorklet processor error", event);
+      if (isRecording) {
+        stopRecordingAndDownload("worklet-error").catch((err) =>
+          console.error("[recording] failed after worklet error", err)
+        );
+      }
+      recorderReady = false;
+      setRecordingSupported(false);
+      connectMasterDirect();
+    };
+
+    try {
+      masterGain.disconnect();
+    } catch (err) {
+      // The node may not have an existing output yet.
+    }
+    masterGain.connect(recorderNode).connect(audioContext.destination);
+    recorderReady = true;
+    setRecordingSupported(true);
+    return true;
+  } catch (err) {
+    console.warn("[recording] AudioWorklet initialization failed", err);
+    recorderNode = null;
+    recorderReady = false;
+    setRecordingSupported(false);
+    connectMasterDirect();
+    return false;
+  }
+}
+
+function connectMasterDirect() {
+  if (!audioContext || !masterGain) return;
+  try {
+    masterGain.disconnect();
+  } catch (err) {
+    // A not-yet-connected node can throw in some browsers.
+  }
+  try {
+    masterGain.connect(audioContext.destination);
+  } catch (err) {
+    console.error("[audio] failed to connect master output", err);
+  }
+}
+
+function handleRecorderMessage(event) {
+  const message = event.data || {};
+  if (message.type !== "pcm" || !isRecording) return;
+  if (message.samples instanceof Float32Array) {
+    recordedChunks.push(message.samples);
+  }
+}
+
+async function startRecording() {
+  if (isRecording) return;
+  if (!recorderSupported) {
+    setRecordingStatus("Recording is not supported in this browser.", "is-error");
+    updateRecordingButton();
+    return;
+  }
+
+  if (!state.running) {
+    await startSimulation();
+    if (!state.running) {
+      setRecordingStatus("Start the simulator before recording.", "is-error");
+      return;
+    }
+  } else {
+    await ensureAudio();
+    if (audioContext) {
+      await audioContext.resume();
+    }
+  }
+
+  if (!recorderReady || !recorderNode) {
+    const ok = await initRecorderWorklet();
+    if (!ok) return;
+  }
+
+  recordedChunks = [];
+  recordedSampleRate = audioContext ? audioContext.sampleRate : null;
+  recordingStartedAt = performance.now();
+  isRecording = true;
+  recorderNode.port.postMessage({ type: "start" });
+  setRecordingStatus("Recording...", "is-recording");
+  updateRecordingButton();
+  updateRecordingTimer();
+  recordingTimerId = window.setInterval(updateRecordingTimer, 100);
+  console.log("[recording] started", {
+    sampleRate: recordedSampleRate,
+    maxSeconds: MAX_RECORDING_SECONDS,
+  });
+}
+
+async function stopRecordingAndDownload(reason = "manual") {
+  if (!isRecording) return;
+  isRecording = false;
+  if (recordingTimerId != null) {
+    window.clearInterval(recordingTimerId);
+    recordingTimerId = null;
+  }
+  updateRecordingTimer();
+  updateRecordingButton();
+  setRecordingStatus("Rendering WAV...");
+
+  if (recorderNode) {
+    recorderNode.port.postMessage({ type: "stop" });
+  }
+
+  const chunks = recordedChunks;
+  const sampleRate = recordedSampleRate || audioContext?.sampleRate || 44100;
+  recordedChunks = [];
+  recordedSampleRate = null;
+
+  if (!chunks.length) {
+    setRecordingStatus("No audio captured.", "is-error");
+    console.warn("[recording] stopped with no captured chunks", { reason });
+    return;
+  }
+
+  const wavBuffer = encodeWavMono(chunks, sampleRate);
+  const blob = new Blob([wavBuffer], { type: "audio/wav" });
+  downloadBlob(blob, createRecordingFilename());
+  setRecordingStatus(
+    reason === "max-duration" ? "Downloaded. Max length reached." : "Downloaded"
+  );
+  console.log("[recording] downloaded", {
+    reason,
+    chunks: chunks.length,
+    sampleRate,
+    bytes: wavBuffer.byteLength,
+  });
+}
+
+function encodeWavMono(floatChunks, sampleRate) {
+  let totalLength = 0;
+  floatChunks.forEach((chunk) => {
+    totalLength += chunk.length;
+  });
+
+  const bytesPerSample = 2;
+  const channelCount = 1;
+  const dataSize = totalLength * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channelCount, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);
+  view.setUint16(32, channelCount * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  floatChunks.forEach((chunk) => {
+    for (let i = 0; i < chunk.length; i += 1) {
+      const sample = clamp(chunk[i], -1, 1);
+      const pcm = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, Math.round(pcm), true);
+      offset += bytesPerSample;
+    }
+  });
+
+  return buffer;
+}
+
+function writeAscii(view, offset, text) {
+  for (let i = 0; i < text.length; i += 1) {
+    view.setUint8(offset + i, text.charCodeAt(i));
+  }
+}
+
+function createRecordingFilename() {
+  const now = new Date();
+  const stamp =
+    `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}` +
+    `${String(now.getDate()).padStart(2, "0")}-` +
+    `${String(now.getHours()).padStart(2, "0")}` +
+    `${String(now.getMinutes()).padStart(2, "0")}` +
+    `${String(now.getSeconds()).padStart(2, "0")}`;
+  recordingFileCounter += 1;
+  const suffix =
+    recordingFileCounter > 1
+      ? `-${String(recordingFileCounter).padStart(2, "0")}`
+      : "";
+  return `vent-beat-v2_${stamp}${suffix}.wav`;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function initRecordingControls() {
+  if (!recordingButton) return;
+  if (!recorderSupported) {
+    setRecordingSupported(false);
+  } else {
+    setRecordingStatus("Ready");
+    updateRecordingButton();
+  }
+  recordingButton.addEventListener("click", () => {
+    if (isRecording) {
+      stopRecordingAndDownload("manual").catch((err) => {
+        console.error("[recording] stop failed", err);
+        setRecordingStatus("Recording failed.", "is-error");
+        updateRecordingButton();
+      });
+    } else {
+      startRecording().catch((err) => {
+        console.error("[recording] start failed", err);
+        setRecordingStatus("Recording failed.", "is-error");
+        updateRecordingButton();
+      });
+    }
+  });
+}
+
+// ===== Web Audio の準備 =====
 
 async function ensureAudio() {
   if (audioReadyPromise) return audioReadyPromise;
@@ -837,9 +1693,10 @@ async function ensureAudio() {
     audioContext = new AC();
     masterGain = audioContext.createGain();
     masterGain.gain.value = 0.9;
-    masterGain.connect(audioContext.destination);
+    await initRecorderWorklet();
     noiseBuffer = createNoiseBuffer(audioContext);
     sampleBuffers = await loadSampleBuffers(audioContext);
+    await decodeUserSamplesForAudio();
     if (!sampleBuffers.length) {
       console.warn("No samples loaded; using noise fallback only.");
     }
@@ -1141,15 +1998,27 @@ function playClick({ rawStrength, strength, obstacle, obstacleIndex, bladeIndex 
 }
 
 function getSampleBufferForObstacle(obstacle) {
-  if (!sampleBuffers.length) return null;
-  const raw =
-    obstacle && typeof obstacle.sampleIndex === "number"
+  const ref = getObstacleSampleRef(obstacle);
+  if (ref.type === "noise") return null;
+  if (ref.type === "user") {
+    const sample = findUserSampleById(ref.id);
+    if (!sample || !sample.buffer) {
+      console.warn("[user-samples] missing user sample, using noise fallback", ref.id);
+      return null;
+    }
+    return sample.buffer;
+  }
+  const index = getBuiltinSampleIndexByRef(ref);
+  const fallbackIndex =
+    index >= 0
+      ? index
+      : obstacle && typeof obstacle.sampleIndex === "number"
       ? obstacle.sampleIndex
-      : 0;
-  if (raw < 0 || raw >= sampleBuffers.length) {
+      : -1;
+  if (fallbackIndex < 0 || fallbackIndex >= sampleBuffers.length) {
     return null;
   }
-  return sampleBuffers[raw] ?? null;
+  return sampleBuffers[fallbackIndex] ?? null;
 }
 
 function playSampleHit(buffer, { rawStrength, strength, now, obstacle, obstacleIndex }) {
@@ -1354,8 +2223,11 @@ async function startSimulation() {
   requestAnimationFrame(loop);
 }
 
-function stopSimulation() {
+async function stopSimulation() {
   if (!state.running) return;
+  if (isRecording) {
+    await stopRecordingAndDownload("simulation-stop");
+  }
   state.running = false;
   if (toggleButton) {
     toggleButton.textContent = "Start";
@@ -1369,7 +2241,9 @@ function stopSimulation() {
 if (toggleButton) {
   toggleButton.addEventListener("click", () => {
     if (state.running) {
-      stopSimulation();
+      stopSimulation().catch((err) =>
+        console.error("stopSimulation error", err)
+      );
     } else {
       startSimulation().catch((err) =>
         console.error("startSimulation error", err)

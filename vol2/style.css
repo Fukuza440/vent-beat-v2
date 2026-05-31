@@ -126,6 +126,150 @@ button.primary {
   color: #11131a;
 }
 
+.recording-section {
+  gap: 0.65rem;
+}
+
+.recording-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.recording-button {
+  min-width: 12rem;
+}
+
+.recording-button.is-recording {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: rgba(153, 27, 27, 0.18);
+}
+
+.recording-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.recording-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.recording-status-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.recording-status-label {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.recording-status.is-recording {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.recording-status.is-error {
+  color: #92400e;
+  font-weight: 700;
+}
+
+.recording-note {
+  margin: 0;
+}
+
+.user-sample-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-sample-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.user-sample-status-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.user-sample-status-label {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.user-sample-status.is-error {
+  color: #92400e;
+  font-weight: 700;
+}
+
+.user-sample-status.is-ok {
+  color: #166534;
+  font-weight: 700;
+}
+
+.user-sample-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.user-sample-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.user-sample-name {
+  font-weight: 700;
+  color: #11131a;
+  overflow-wrap: anywhere;
+}
+
+.user-sample-meta {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.user-sample-row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.user-sample-note {
+  margin: 0;
+}
+
 .obstacle-volume-controls {
   display: flex;
   flex-direction: column;
